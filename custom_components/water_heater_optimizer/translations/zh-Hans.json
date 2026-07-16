@@ -1,0 +1,34 @@
+{
+  "title": "热水器温度优化器",
+  "config": {
+    "step": {
+      "user": {
+        "title": "热水器温度优化器",
+        "description": "为热水器配置动态温度优化。",
+        "data": {
+          "water_heater": "目标热水器",
+          "inlet_temp_sensor": "进水温度传感器",
+          "target_temp": "目标淋浴温度",
+          "hot_water_ratio": "热水比例",
+          "trigger_type": "快照触发条件",
+          "trigger_entity": "触发实体",
+          "trigger_from_state": "从状态",
+          "trigger_to_state": "到状态",
+          "trigger_duration": "持续时间（秒）",
+          "trigger_time": "触发时间",
+          "min_temp": "最低温度",
+          "max_temp": "最高温度"
+        }
+      }
+    }
+  },
+  "selector": {
+    "trigger_type": {
+      "options": {
+        "entity_state": "实体状态变化",
+        "duration": "持续时间",
+        "fixed_time": "固定时间"
+      }
+    }
+  }
+}

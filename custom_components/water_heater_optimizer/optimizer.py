@@ -8,7 +8,6 @@ from homeassistant.helpers.event import (
     async_call_later,
 )
 from homeassistant.helpers.dispatcher import async_dispatcher_send
-from homeassistant.util import dt as dt_util
 
 from .const import (
     CONF_WATER_HEATER,

@@ -9,5 +9,5 @@
   "documentation": "https://github.com/SagizawaTsubasa/water_heater_optimizer",
   "iot_class": "local_polling",
   "requirements": [],
-  "version": "V0.0.1"
+  "version": "V0.0.3"
 }
