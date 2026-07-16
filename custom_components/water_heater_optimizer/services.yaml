@@ -1,0 +1,10 @@
+take_snapshot:
+  name: Take Snapshot
+  description: Manually trigger a temperature snapshot for the optimizer.
+  fields:
+    entry_id:
+      name: Entry ID
+      description: The config entry ID of the optimizer instance.
+      required: true
+      selector:
+        text:
