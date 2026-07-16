@@ -67,9 +67,9 @@ class WaterHeaterOptimizerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             ),
             vol.Required(CONF_TRIGGER_TYPE, default=TRIGGER_TYPE_ENTITY_STATE): SelectSelector(
                 SelectSelectorConfig(options=[
-                    {"label": "Entity State Change", "value": TRIGGER_TYPE_ENTITY_STATE},
-                    {"label": "Duration", "value": TRIGGER_TYPE_DURATION},
-                    {"label": "Fixed Time", "value": TRIGGER_TYPE_FIXED_TIME},
+                    TRIGGER_TYPE_ENTITY_STATE,
+                    TRIGGER_TYPE_DURATION,
+                    TRIGGER_TYPE_FIXED_TIME,
                 ])
             ),
             vol.Optional(CONF_TRIGGER_ENTITY): EntitySelector(),
@@ -91,7 +91,4 @@ class WaterHeaterOptimizerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=data_schema,
             errors=errors,
-            description_placeholders={
-                "docs": "https://github.com/your-github-username/water_heater_optimizer"
-            },
         )
