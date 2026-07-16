@@ -4,20 +4,26 @@
     "step": {
       "user": {
         "title": "Water Heater Optimizer",
-        "description": "Configure dynamic temperature optimization for your water heater.",
+        "description": "Configure basic parameters for temperature optimization.",
         "data": {
           "water_heater": "Target Water Heater",
           "inlet_temp_sensor": "Inlet Temperature Sensor",
           "target_temp": "Target Shower Temperature",
           "hot_water_ratio": "Hot Water Ratio",
-          "trigger_type": "Snapshot Trigger",
-          "trigger_entity": "Trigger Entity",
+          "trigger_type": "Snapshot Trigger Type",
+          "min_temp": "Minimum Temperature",
+          "max_temp": "Maximum Temperature"
+        }
+      },
+      "trigger": {
+        "title": "Trigger Configuration",
+        "description": "{description}",
+        "data": {
+          "trigger_entity": "Trigger Entity (optional)",
           "trigger_from_state": "From State",
           "trigger_to_state": "To State",
           "trigger_duration": "Duration (seconds)",
-          "trigger_time": "Trigger Time",
-          "min_temp": "Minimum Temperature",
-          "max_temp": "Maximum Temperature"
+          "trigger_time": "Trigger Time"
         }
       }
     }

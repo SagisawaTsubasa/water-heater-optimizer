@@ -43,14 +43,13 @@ class WaterHeaterOptimizerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     async def async_step_user(self, user_input=None):
-        """Handle the initial step."""
+        """Step 1: Basic configuration."""
         errors = {}
 
         if user_input is not None:
-            title = f"Optimizer {user_input[CONF_WATER_HEATER]}"
-            await self.async_set_unique_id(title)
-            self._abort_if_unique_id_configured()
-            return self.async_create_entry(title=title, data=user_input)
+            # Store step 1 data and proceed to step 2
+            self._data = user_input
+            return await self.async_step_trigger()
 
         data_schema = vol.Schema({
             vol.Required(CONF_WATER_HEATER): EntitySelector(
@@ -72,13 +71,6 @@ class WaterHeaterOptimizerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     TRIGGER_TYPE_FIXED_TIME,
                 ])
             ),
-            vol.Optional(CONF_TRIGGER_ENTITY): EntitySelector(),
-            vol.Optional(CONF_TRIGGER_FROM_STATE): TextSelector(),
-            vol.Optional(CONF_TRIGGER_TO_STATE): TextSelector(),
-            vol.Optional(CONF_TRIGGER_DURATION, default=120): NumberSelector(
-                NumberSelectorConfig(min=10, max=3600, step=10, unit_of_measurement="s")
-            ),
-            vol.Optional(CONF_TRIGGER_TIME, default="06:00"): TimeSelector(),
             vol.Optional(CONF_MIN_TEMP, default=DEFAULT_MIN_TEMP): NumberSelector(
                 NumberSelectorConfig(min=30, max=60, step=1, unit_of_measurement="°C")
             ),
@@ -91,4 +83,53 @@ class WaterHeaterOptimizerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=data_schema,
             errors=errors,
+        )
+
+    async def async_step_trigger(self, user_input=None):
+        """Step 2: Trigger configuration based on trigger type."""
+        errors = {}
+        trigger_type = self._data[CONF_TRIGGER_TYPE]
+
+        if user_input is not None:
+            # Merge step 1 and step 2 data
+            self._data.update(user_input)
+            title = f"Optimizer {self._data[CONF_WATER_HEATER]}"
+            await self.async_set_unique_id(title)
+            self._abort_if_unique_id_configured()
+            return self.async_create_entry(title=title, data=self._data)
+
+        # Build schema based on trigger type
+        if trigger_type == TRIGGER_TYPE_ENTITY_STATE:
+            data_schema = vol.Schema({
+                vol.Optional(CONF_TRIGGER_ENTITY): EntitySelector(),
+                vol.Optional(CONF_TRIGGER_FROM_STATE): TextSelector(),
+                vol.Optional(CONF_TRIGGER_TO_STATE): TextSelector(),
+            })
+            description = "Configure entity state change trigger. Leave Trigger Entity empty to use the inlet temperature sensor."
+
+        elif trigger_type == TRIGGER_TYPE_DURATION:
+            data_schema = vol.Schema({
+                vol.Optional(CONF_TRIGGER_ENTITY): EntitySelector(),
+                vol.Optional(CONF_TRIGGER_TO_STATE): TextSelector(),
+                vol.Optional(CONF_TRIGGER_DURATION, default=120): NumberSelector(
+                    NumberSelectorConfig(min=10, max=3600, step=10, unit_of_measurement="s")
+                ),
+            })
+            description = "Configure duration trigger. Snapshot will be taken after the entity has been in the specified state for the given duration."
+
+        elif trigger_type == TRIGGER_TYPE_FIXED_TIME:
+            data_schema = vol.Schema({
+                vol.Optional(CONF_TRIGGER_TIME, default="06:00"): TimeSelector(),
+            })
+            description = "Configure fixed time trigger. Snapshot will be taken daily at the specified time."
+
+        else:
+            data_schema = vol.Schema({})
+            description = "Unknown trigger type."
+
+        return self.async_show_form(
+            step_id="trigger",
+            data_schema=data_schema,
+            errors=errors,
+            description_placeholders={"description": description},
         )
