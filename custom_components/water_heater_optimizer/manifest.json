@@ -2,12 +2,13 @@
   "domain": "water_heater_optimizer",
   "name": "Water Heater Optimizer",
   "codeowners": [
-    "@SagizawaTsubasa"
+    "@SagisawaTsubasa"
   ],
   "config_flow": true,
   "dependencies": [],
-  "documentation": "https://github.com/SagizawaTsubasa/water_heater_optimizer",
+  "documentation": "https://github.com/SagisawaTsubasa/water-heater-optimizer",
   "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/SagisawaTsubasa/water-heater-optimizer/issues",
   "requirements": [],
-  "version": "V0.0.4"
+  "version": "0.0.5"
 }

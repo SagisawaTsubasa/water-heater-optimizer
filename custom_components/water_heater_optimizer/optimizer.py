@@ -41,7 +41,8 @@ class WaterHeaterOptimizer:
     def __init__(self, hass: HomeAssistant, entry):
         self.hass = hass
         self.entry = entry
-        self.config = entry.data
+        # Options (re-configured values) take priority over initial setup data
+        self.config = {**entry.data, **entry.options}
         self.recommended_temp = None
         self.reference_tap_temp = None
         self.session_min_temp = None

@@ -5,6 +5,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from homeassistant.helpers.restore_state import RestoreEntity
 
 from .const import DOMAIN, SIGNAL_UPDATE
 
@@ -19,7 +20,7 @@ async def async_setup_entry(
     async_add_entities([AutoAdjustSwitch(optimizer, entry)])
 
 
-class AutoAdjustSwitch(SwitchEntity):
+class AutoAdjustSwitch(SwitchEntity, RestoreEntity):
     """Toggle auto-adjustment of water heater temperature."""
 
     def __init__(self, optimizer, entry):
@@ -30,7 +31,7 @@ class AutoAdjustSwitch(SwitchEntity):
         self._attr_icon = "mdi:thermometer-auto"
 
     async def async_added_to_hass(self):
-        """Register update dispatcher."""
+        """Register update dispatcher and restore last state."""
         self.async_on_remove(
             async_dispatcher_connect(
                 self.hass,
@@ -38,6 +39,9 @@ class AutoAdjustSwitch(SwitchEntity):
                 self.async_write_ha_state,
             )
         )
+        # Restore auto-adjust flag across HA restarts
+        if (last_state := await self.async_get_last_state()) is not None:
+            self._optimizer.auto_adjust = last_state.state == "on"
 
     @property
     def is_on(self):
