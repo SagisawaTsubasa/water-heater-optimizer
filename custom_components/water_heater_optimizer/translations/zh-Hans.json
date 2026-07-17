@@ -28,6 +28,34 @@
       }
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "title": "热水器温度优化器",
+        "description": "重新配置温度优化的基本参数。",
+        "data": {
+          "water_heater": "目标热水器",
+          "inlet_temp_sensor": "进水温度传感器",
+          "target_temp": "目标淋浴温度",
+          "hot_water_ratio": "热水比例",
+          "trigger_type": "快照触发类型",
+          "min_temp": "最低温度",
+          "max_temp": "最高温度"
+        }
+      },
+      "trigger": {
+        "title": "触发条件配置",
+        "description": "{description}",
+        "data": {
+          "trigger_entity": "触发实体（可选）",
+          "trigger_from_state": "从状态",
+          "trigger_to_state": "到状态",
+          "trigger_duration": "持续时间（秒）",
+          "trigger_time": "触发时间"
+        }
+      }
+    }
+  },
   "selector": {
     "trigger_type": {
       "options": {
