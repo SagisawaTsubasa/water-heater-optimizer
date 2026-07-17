@@ -49,11 +49,6 @@ Desired proportion of water from the heater (default 0.70 = 70%). |
 | 6 | **最低/最高温度 / Min / Max Temp** | 安全限制（默认 40°C ~ 50°C）。  
 Safety clamps (default 40°C ~ 50°C). |
 
-### 二次编辑 / Re-configuration
-
-已添加的条目可以随时通过条目上的 **配置 / Configure** 按钮重新编辑全部参数，保存后自动重载生效。  
-Existing entries can be re-configured at any time via the **Configure** button on the entry; changes are applied automatically after saving.
-
 ### 可增量配置 / Incremental Configuration
 
 你可以添加多个优化器实例——每个热水器或每个淋浴区一个，互不影响。  
@@ -80,8 +75,8 @@ The result is clamped between your configured min/max values.
 Calculated optimal heater outlet temperature. |
 | `sensor.{name}_reference_tap_temperature` | Sensor | 上次快照的自来水温度。  
 Last captured inlet water temperature. |
-| `switch.{name}_auto_adjust` | Switch | 是否自动将推荐温度下发到热水器，重启后自动恢复开关状态。  
-Toggle automatic application of the recommended temperature; state is restored across restarts. |
+| `switch.{name}_auto_adjust` | Switch | 是否自动将推荐温度下发到热水器。  
+Toggle automatic application of the recommended temperature. |
 
 ---
 
