@@ -36,6 +36,41 @@ from .const import (
     TRIGGER_TYPE_FIXED_TIME,
 )
 
+# 每种触发类型实际使用的配置键：切换类型后清理其余键 (L6)
+_TRIGGER_KEY_MAP = {
+    TRIGGER_TYPE_ENTITY_STATE: (CONF_TRIGGER_ENTITY, CONF_TRIGGER_FROM_STATE, CONF_TRIGGER_TO_STATE),
+    TRIGGER_TYPE_DURATION: (CONF_TRIGGER_ENTITY, CONF_TRIGGER_TO_STATE, CONF_TRIGGER_DURATION),
+    TRIGGER_TYPE_FIXED_TIME: (CONF_TRIGGER_TIME,),
+}
+_ALL_TRIGGER_KEYS = tuple(
+    dict.fromkeys(key for keys in _TRIGGER_KEY_MAP.values() for key in keys)
+)
+
+
+def _clean_trigger_keys(data: dict) -> dict:
+    """Drop trigger-specific keys not belonging to the configured trigger type."""
+    keep = _TRIGGER_KEY_MAP.get(data.get(CONF_TRIGGER_TYPE), ())
+    for key in _ALL_TRIGGER_KEYS:
+        if key not in keep:
+            data.pop(key, None)
+    return data
+
+
+def _validate_ranges(user_input: dict) -> str | None:
+    """Cross-validate min/max/target temperatures (M1). Returns error key or None."""
+    min_temp = user_input.get(CONF_MIN_TEMP, DEFAULT_MIN_TEMP)
+    max_temp = user_input.get(CONF_MAX_TEMP, DEFAULT_MAX_TEMP)
+    target = user_input.get(CONF_TARGET_TEMP, DEFAULT_TARGET_TEMP)
+    try:
+        min_temp, max_temp, target = float(min_temp), float(max_temp), float(target)
+    except (TypeError, ValueError):
+        return "invalid_range"
+    if min_temp >= max_temp:
+        return "invalid_range"
+    if not min_temp <= target <= max_temp:
+        return "target_out_of_range"
+    return None
+
 
 class WaterHeaterOptimizerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow."""
@@ -52,9 +87,19 @@ class WaterHeaterOptimizerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors = {}
 
         if user_input is not None:
-            # Store step 1 data and proceed to step 2
-            self._data = user_input
-            return await self.async_step_trigger()
+            error = _validate_ranges(user_input)
+            if error is not None:
+                errors["base"] = error
+            else:
+                # 用热水器实体做唯一标识，第一步就查重 (L5)
+                await self.async_set_unique_id(user_input[CONF_WATER_HEATER])
+                self._abort_if_unique_id_configured()
+                # 兼容旧版按标题生成的 unique_id：同热水器的旧条目也要查重
+                for existing in self._async_current_entries():
+                    if existing.data.get(CONF_WATER_HEATER) == user_input[CONF_WATER_HEATER]:
+                        return self.async_abort(reason="already_configured")
+                self._data = user_input
+                return await self.async_step_trigger()
 
         data_schema = vol.Schema({
             vol.Required(CONF_WATER_HEATER): EntitySelector(
@@ -99,9 +144,7 @@ class WaterHeaterOptimizerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             # Merge step 1 and step 2 data
             self._data.update(user_input)
             title = f"Optimizer {self._data[CONF_WATER_HEATER]}"
-            await self.async_set_unique_id(title)
-            self._abort_if_unique_id_configured()
-            return self.async_create_entry(title=title, data=self._data)
+            return self.async_create_entry(title=title, data=_clean_trigger_keys(self._data))
 
         # Build schema based on trigger type
         if trigger_type == TRIGGER_TYPE_ENTITY_STATE:
@@ -161,8 +204,12 @@ class WaterHeaterOptimizerOptionsFlow(config_entries.OptionsFlow):
         errors = {}
 
         if user_input is not None:
-            self._data = user_input
-            return await self.async_step_trigger()
+            error = _validate_ranges(user_input)
+            if error is not None:
+                errors["base"] = error
+            else:
+                self._data = user_input
+                return await self.async_step_trigger()
 
         data_schema = vol.Schema({
             vol.Required(
@@ -224,7 +271,7 @@ class WaterHeaterOptimizerOptionsFlow(config_entries.OptionsFlow):
 
         if user_input is not None:
             self._data.update(user_input)
-            return self.async_create_entry(title="", data=self._data)
+            return self.async_create_entry(title="", data=_clean_trigger_keys(self._data))
 
         if trigger_type == TRIGGER_TYPE_ENTITY_STATE:
             data_schema = vol.Schema({

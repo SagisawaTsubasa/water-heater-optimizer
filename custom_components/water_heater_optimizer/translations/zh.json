@@ -26,6 +26,13 @@
           "trigger_time": "触发时间"
         }
       }
+    },
+    "error": {
+      "invalid_range": "最低温度必须低于最高温度。",
+      "target_out_of_range": "目标淋浴温度必须介于最低温度和最高温度之间。"
+    },
+    "abort": {
+      "already_configured": "该热水器已配置"
     }
   },
   "options": {
@@ -54,6 +61,10 @@
           "trigger_time": "触发时间"
         }
       }
+    },
+    "error": {
+      "invalid_range": "最低温度必须低于最高温度。",
+      "target_out_of_range": "目标淋浴温度必须介于最低温度和最高温度之间。"
     }
   },
   "selector": {

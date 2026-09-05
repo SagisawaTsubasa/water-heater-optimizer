@@ -26,6 +26,13 @@
           "trigger_time": "Trigger Time"
         }
       }
+    },
+    "abort": {
+      "already_configured": "This water heater is already configured"
+    },
+    "error": {
+      "invalid_range": "Minimum temperature must be lower than maximum temperature.",
+      "target_out_of_range": "Target shower temperature must be between the minimum and maximum temperatures."
     }
   },
   "options": {
@@ -54,6 +61,10 @@
           "trigger_time": "Trigger Time"
         }
       }
+    },
+    "error": {
+      "invalid_range": "Minimum temperature must be lower than maximum temperature.",
+      "target_out_of_range": "Target shower temperature must be between the minimum and maximum temperatures."
     }
   },
   "selector": {
