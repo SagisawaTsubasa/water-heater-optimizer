@@ -56,20 +56,33 @@ def _clean_trigger_keys(data: dict) -> dict:
     return data
 
 
-def _validate_ranges(user_input: dict) -> str | None:
-    """Cross-validate min/max/target temperatures (M1). Returns error key or None."""
+def _fmt_temp(value) -> str:
+    """Format a temperature for display in error messages."""
+    if value is None:
+        return "-"
+    try:
+        num = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+    return str(int(num)) if num.is_integer() else str(num)
+
+
+def _validate_ranges(user_input: dict) -> tuple[str | None, str, str]:
+    """Validate min/max temperature window (M1). Returns (error key, min, max).
+
+    淋浴目标温度与热水器设定窗口是两个量纲，不做跨项约束；
+    这里只校验窗口本身 min < max。
+    """
     min_temp = user_input.get(CONF_MIN_TEMP, DEFAULT_MIN_TEMP)
     max_temp = user_input.get(CONF_MAX_TEMP, DEFAULT_MAX_TEMP)
-    target = user_input.get(CONF_TARGET_TEMP, DEFAULT_TARGET_TEMP)
+    min_disp, max_disp = _fmt_temp(min_temp), _fmt_temp(max_temp)
     try:
-        min_temp, max_temp, target = float(min_temp), float(max_temp), float(target)
+        min_val, max_val = float(min_temp), float(max_temp)
     except (TypeError, ValueError):
-        return "invalid_range"
-    if min_temp >= max_temp:
-        return "invalid_range"
-    if not min_temp <= target <= max_temp:
-        return "target_out_of_range"
-    return None
+        return "invalid_range", min_disp, max_disp
+    if min_val >= max_val:
+        return "invalid_range", min_disp, max_disp
+    return None, min_disp, max_disp
 
 
 class WaterHeaterOptimizerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -85,11 +98,13 @@ class WaterHeaterOptimizerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(self, user_input=None):
         """Step 1: Basic configuration."""
         errors = {}
+        placeholders = {}
 
         if user_input is not None:
-            error = _validate_ranges(user_input)
+            error, min_disp, max_disp = _validate_ranges(user_input)
             if error is not None:
                 errors["base"] = error
+                placeholders = {"min_temp": min_disp, "max_temp": max_disp}
             else:
                 # 用热水器实体做唯一标识，第一步就查重 (L5)
                 await self.async_set_unique_id(user_input[CONF_WATER_HEATER])
@@ -133,6 +148,7 @@ class WaterHeaterOptimizerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=data_schema,
             errors=errors,
+            description_placeholders=placeholders,
         )
 
     async def async_step_trigger(self, user_input=None):
@@ -202,11 +218,13 @@ class WaterHeaterOptimizerOptionsFlow(config_entries.OptionsFlow):
     async def async_step_init(self, user_input=None):
         """Step 1: Basic configuration, prefilled with current values."""
         errors = {}
+        placeholders = {}
 
         if user_input is not None:
-            error = _validate_ranges(user_input)
+            error, min_disp, max_disp = _validate_ranges(user_input)
             if error is not None:
                 errors["base"] = error
+                placeholders = {"min_temp": min_disp, "max_temp": max_disp}
             else:
                 self._data = user_input
                 return await self.async_step_trigger()
@@ -262,6 +280,7 @@ class WaterHeaterOptimizerOptionsFlow(config_entries.OptionsFlow):
             step_id="init",
             data_schema=data_schema,
             errors=errors,
+            description_placeholders=placeholders,
         )
 
     async def async_step_trigger(self, user_input=None):

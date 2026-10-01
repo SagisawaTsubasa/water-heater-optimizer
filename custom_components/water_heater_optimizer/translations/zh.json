@@ -11,8 +11,8 @@
           "target_temp": "目标淋浴温度",
           "hot_water_ratio": "热水比例",
           "trigger_type": "快照触发类型",
-          "min_temp": "最低温度",
-          "max_temp": "最高温度"
+          "min_temp": "推荐设定温度下限",
+          "max_temp": "推荐设定温度上限"
         }
       },
       "trigger": {
@@ -28,8 +28,7 @@
       }
     },
     "error": {
-      "invalid_range": "最低温度必须低于最高温度。",
-      "target_out_of_range": "目标淋浴温度必须介于最低温度和最高温度之间。"
+      "invalid_range": "最低温度（{min_temp}）必须低于最高温度（{max_temp}）。"
     },
     "abort": {
       "already_configured": "该热水器已配置"
@@ -46,8 +45,8 @@
           "target_temp": "目标淋浴温度",
           "hot_water_ratio": "热水比例",
           "trigger_type": "快照触发类型",
-          "min_temp": "最低温度",
-          "max_temp": "最高温度"
+          "min_temp": "推荐设定温度下限",
+          "max_temp": "推荐设定温度上限"
         }
       },
       "trigger": {
@@ -63,8 +62,7 @@
       }
     },
     "error": {
-      "invalid_range": "最低温度必须低于最高温度。",
-      "target_out_of_range": "目标淋浴温度必须介于最低温度和最高温度之间。"
+      "invalid_range": "最低温度（{min_temp}）必须低于最高温度（{max_temp}）。"
     }
   },
   "selector": {

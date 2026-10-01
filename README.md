@@ -46,8 +46,8 @@ Choose how to capture the inlet temperature: entity state change, duration, or f
 Your thermostatic mixer setpoint (default 37°C). |
 | 5 | **热水比例 / Hot Water Ratio** | 期望从热水器提供的水量比例（默认 0.70 = 70%）。  
 Desired proportion of water from the heater (default 0.70 = 70%). |
-| 6 | **最低/最高温度 / Min / Max Temp** | 安全限制（默认 40°C ~ 50°C）。  
-Safety clamps (default 40°C ~ 50°C). |
+| 6 | **推荐设定温度下限/上限 / Recommended Setpoint Minimum/Maximum** | 推荐热水器设定温度的允许窗口（默认 40°C ~ 50°C），与目标淋浴温度无关。  
+Allowed window for the recommended heater setpoint (default 40°C ~ 50°C), independent of the shower target temperature. |
 
 ### 可增量配置 / Incremental Configuration
 
@@ -132,6 +132,16 @@ Yes. Add two optimizer instances, both pointing to the same inlet sensor but dif
 ---
 
 ## 更新日志 / Changelog
+
+### 0.2.0
+- 修复配置误报：淋浴目标温度不再被要求落在推荐设定温度窗口（最低/最高）内，两者本就是独立参数
+  Fixed config false positive: the shower target temperature is no longer required to fall inside the recommended setpoint window — they are independent parameters
+- 删除 `target_out_of_range` 校验；「最低温度必须低于最高温度」报错现在会回显实际填写的数值
+  Removed the `target_out_of_range` validation; the invalid-range error now shows the entered values
+- 字段「最低温度/最高温度」更名为「推荐设定温度下限/上限」以消除歧义
+  Renamed "Minimum/Maximum Temperature" fields to "Recommended Setpoint Minimum/Maximum" for clarity
+- 修复下发温度时对热水器自身限值的取整方向（下限向上取整、上限向下取整），避免 41.5°C 这类限值被舍入到限值之外导致下发被拒
+  Fixed rounding direction of the heater's own limits when applying temperature (ceil for the lower bound, floor for the upper), preventing limits like 41.5°C from being rounded outside the allowed range and getting rejected
 
 ### 0.0.5
 - 修复 manifest 中的仓库链接与用户名拼写  

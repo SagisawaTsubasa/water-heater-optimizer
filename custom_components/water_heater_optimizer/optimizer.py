@@ -1,6 +1,7 @@
 """Core optimizer logic."""
 
 import logging
+import math
 import time
 
 from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
@@ -258,9 +259,9 @@ class WaterHeaterOptimizer:
                 lo = heater_state.attributes.get("min_temp")
                 hi = heater_state.attributes.get("max_temp")
                 if lo is not None:
-                    target = max(target, int(float(lo)))
+                    target = max(target, math.ceil(float(lo)))
                 if hi is not None:
-                    target = min(target, int(float(hi)))
+                    target = min(target, math.floor(float(hi)))
             except (TypeError, ValueError):
                 pass
             current = heater_state.attributes.get("temperature")

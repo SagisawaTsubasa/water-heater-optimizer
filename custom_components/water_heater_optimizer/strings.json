@@ -11,8 +11,8 @@
           "target_temp": "Target Shower Temperature",
           "hot_water_ratio": "Hot Water Ratio",
           "trigger_type": "Snapshot Trigger Type",
-          "min_temp": "Minimum Temperature",
-          "max_temp": "Maximum Temperature"
+          "min_temp": "Recommended Setpoint Minimum",
+          "max_temp": "Recommended Setpoint Maximum"
         }
       },
       "trigger": {
@@ -31,8 +31,7 @@
       "already_configured": "This water heater is already configured"
     },
     "error": {
-      "invalid_range": "Minimum temperature must be lower than maximum temperature.",
-      "target_out_of_range": "Target shower temperature must be between the minimum and maximum temperatures."
+      "invalid_range": "Minimum temperature ({min_temp}) must be lower than maximum temperature ({max_temp})."
     }
   },
   "options": {
@@ -46,8 +45,8 @@
           "target_temp": "Target Shower Temperature",
           "hot_water_ratio": "Hot Water Ratio",
           "trigger_type": "Snapshot Trigger Type",
-          "min_temp": "Minimum Temperature",
-          "max_temp": "Maximum Temperature"
+          "min_temp": "Recommended Setpoint Minimum",
+          "max_temp": "Recommended Setpoint Maximum"
         }
       },
       "trigger": {
@@ -63,8 +62,7 @@
       }
     },
     "error": {
-      "invalid_range": "Minimum temperature must be lower than maximum temperature.",
-      "target_out_of_range": "Target shower temperature must be between the minimum and maximum temperatures."
+      "invalid_range": "Minimum temperature ({min_temp}) must be lower than maximum temperature ({max_temp})."
     }
   },
   "selector": {
