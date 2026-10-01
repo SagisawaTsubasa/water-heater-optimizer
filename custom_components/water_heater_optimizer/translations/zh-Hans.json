@@ -65,6 +65,18 @@
       "invalid_range": "最低温度（{min_temp}）必须低于最高温度（{max_temp}）。"
     }
   },
+  "services": {
+    "take_snapshot": {
+      "name": "手动快照",
+      "description": "为指定优化器实例手动触发一次温度快照。",
+      "fields": {
+        "entry_id": {
+          "name": "条目 ID",
+          "description": "优化器实例的配置条目 ID。"
+        }
+      }
+    }
+  },
   "selector": {
     "trigger_type": {
       "options": {

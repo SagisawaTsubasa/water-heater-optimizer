@@ -1,15 +1,19 @@
 """Sensor platform for Water Heater Optimizer."""
 
-from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorStateClass,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.restore_state import RestoreEntity
 
-from .const import DOMAIN, ATTR_REFERENCE_TAP_TEMP, SIGNAL_UPDATE
+from .const import ATTR_REFERENCE_TAP_TEMP, DOMAIN, SIGNAL_UPDATE
 
 
 async def async_setup_entry(

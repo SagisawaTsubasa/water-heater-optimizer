@@ -65,6 +65,18 @@
       "invalid_range": "Minimum temperature ({min_temp}) must be lower than maximum temperature ({max_temp})."
     }
   },
+  "services": {
+    "take_snapshot": {
+      "name": "Take snapshot",
+      "description": "Manually trigger a temperature snapshot for an optimizer instance.",
+      "fields": {
+        "entry_id": {
+          "name": "Entry ID",
+          "description": "The config entry ID of the optimizer instance."
+        }
+      }
+    }
+  },
   "selector": {
     "trigger_type": {
       "options": {

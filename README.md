@@ -133,6 +133,18 @@ Yes. Add two optimizer instances, both pointing to the same inlet sensor but dif
 
 ## 更新日志 / Changelog
 
+### 0.2.1
+- 修复：实体状态触发在 HA 启动完成（或条目重载）后补拍一次快照——此前要等进水温度传感器下次状态变化才有数据，夜间进水温度几乎不变，推荐/参考温度传感器会长期 unknown。启动补拍经 `async_at_started` 延后到各集成状态就绪，并尊重 from/to_state 过滤口径  
+  Fixed: the entity-state trigger now takes a snapshot once HA has started (or the entry reloaded) — previously sensors stayed unknown until the inlet sensor's next state change
+- 修复：热水器实体状态缺席时不再盲发原始推荐值（无法夹紧设备限值、无法迟滞比较），记日志跳过等下次快照  
+  Fixed: skip applying (with a log) when the heater entity state is missing instead of blindly sending the raw recommendation
+- 修复：进水温度为非有限值（nan/inf）时跳过快照，不再炸掉启动流程  
+  Fixed: non-finite inlet temperatures (nan/inf) now skip the snapshot instead of crashing startup
+- 新增：`take_snapshot` 服务与 `entry_id` 字段的中英文翻译（services 段）；推荐值被窗口夹紧时输出 debug 日志  
+  Added: zh/en translations for the take_snapshot service; debug log when the recommendation is clamped
+- 清理：import 排序（ruff 清零）  
+  Chores: import sorting (ruff cleared)
+
 ### 0.2.0
 - 修复配置误报：淋浴目标温度不再被要求落在推荐设定温度窗口（最低/最高）内，两者本就是独立参数
   Fixed config false positive: the shower target temperature is no longer required to fall inside the recommended setpoint window — they are independent parameters
@@ -143,6 +155,18 @@ Yes. Add two optimizer instances, both pointing to the same inlet sensor but dif
 - 修复下发温度时对热水器自身限值的取整方向（下限向上取整、上限向下取整），避免 41.5°C 这类限值被舍入到限值之外导致下发被拒
   Fixed rounding direction of the heater's own limits when applying temperature (ceil for the lower bound, floor for the upper), preventing limits like 41.5°C from being rounded outside the allowed range and getting rejected
 
+### 0.0.8
+- 9 月审计修复主体：服务注册带 schema、下发防护（迟滞/冷却/设备限值夹紧）、Platform 枚举、`setdefault` 防御等  
+  Main batch of the September audit fixes: service schema, apply guards (hysteresis/cooldown/device clamp), Platform enum, defensive `setdefault`
+
+### 0.0.7
+- 无代码变更（发布维护）  
+  No code changes (release maintenance)
+
+### 0.0.6
+- 翻译与 manifest 小修  
+  Minor translation and manifest touch-ups
+
 ### 0.0.5
 - 修复 manifest 中的仓库链接与用户名拼写  
   Fixed repository URL and username typo in manifest
@@ -151,7 +175,7 @@ Yes. Add two optimizer instances, both pointing to the same inlet sensor but dif
 - 自动调节开关状态在 HA 重启后自动恢复  
   Auto-adjust switch state is now restored across restarts
 
-### 1.0.0
+### 初始版本（V0.0.1~V0.0.4）
 - 初始版本 / Initial release
 - 支持实体状态、持续时间、固定时间三种触发方式  
   Support for entity state, duration, and fixed-time triggers

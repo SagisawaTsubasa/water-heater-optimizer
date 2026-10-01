@@ -7,35 +7,36 @@ import time
 from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import (
     async_call_later,
     async_track_state_change_event,
     async_track_time_change,
 )
-from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.start import async_at_started
 
 from .const import (
-    CONF_WATER_HEATER,
+    CONF_HOT_WATER_RATIO,
     CONF_INLET_TEMP_SENSOR,
-    CONF_TRIGGER_TYPE,
+    CONF_MAX_TEMP,
+    CONF_MIN_TEMP,
+    CONF_TARGET_TEMP,
+    CONF_TRIGGER_DURATION,
     CONF_TRIGGER_ENTITY,
     CONF_TRIGGER_FROM_STATE,
-    CONF_TRIGGER_TO_STATE,
-    CONF_TRIGGER_DURATION,
     CONF_TRIGGER_TIME,
-    CONF_TARGET_TEMP,
-    CONF_HOT_WATER_RATIO,
-    CONF_MIN_TEMP,
-    CONF_MAX_TEMP,
-    DEFAULT_TARGET_TEMP,
-    DEFAULT_RATIO,
-    DEFAULT_MIN_TEMP,
+    CONF_TRIGGER_TO_STATE,
+    CONF_TRIGGER_TYPE,
+    CONF_WATER_HEATER,
     DEFAULT_MAX_TEMP,
+    DEFAULT_MIN_TEMP,
+    DEFAULT_RATIO,
+    DEFAULT_TARGET_TEMP,
     DEFAULT_TRIGGER_TIME,
-    TRIGGER_TYPE_ENTITY_STATE,
-    TRIGGER_TYPE_DURATION,
-    TRIGGER_TYPE_FIXED_TIME,
     SIGNAL_UPDATE,
+    TRIGGER_TYPE_DURATION,
+    TRIGGER_TYPE_ENTITY_STATE,
+    TRIGGER_TYPE_FIXED_TIME,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -90,8 +91,10 @@ class WaterHeaterOptimizer:
 
         rec = tap_temp + (target - tap_temp) / ratio
         if rec < min_temp:
+            _LOGGER.debug("推荐值 %.1f°C 低于窗口下限 %.1f°C，夹紧", rec, min_temp)
             rec = min_temp
         elif rec > max_temp:
+            _LOGGER.debug("推荐值 %.1f°C 高于窗口上限 %.1f°C，夹紧", rec, max_temp)
             rec = max_temp
         return round(rec)
 
@@ -145,6 +148,41 @@ class WaterHeaterOptimizer:
         self._listeners.append(
             async_track_state_change_event(self.hass, entity, _state_changed)
         )
+
+        # 启动/重载后补拍一次快照 (M4)：否则要等实体下一次状态变化才有数据，
+        # 进水温度夜间几乎不变，传感器会长期停在 unknown。
+        # 经 async_at_started 延后到 HA 启动完成（重载时已启动则立即回调），
+        # 避免在 setup 期其他集成实体尚未恢复状态时白拍。
+        # 启动时不存在状态转移，from_state（离开来源）无从判定——只要当前
+        # 不停在 from_state 且满足 to_state 即补拍；snapshot() 自带
+        # unavailable/unknown 防御。注意 auto_adjust 此时恒为 False（开关
+        # 恢复发生在平台转发阶段且直接赋值，不走 async_set_auto_adjust），
+        # 因此补拍绝不会导致重启即下发。
+        self._listeners.append(
+            async_at_started(
+                self.hass,
+                lambda _hass: self._startup_snapshot(entity, from_state, to_state),
+            )
+        )
+
+    def _startup_snapshot(self, entity: str, from_state: str | None, to_state: str | None):
+        """Take one snapshot after HA started if the current state qualifies."""
+        current = self.hass.states.get(entity)
+        if current is None:
+            _LOGGER.debug("启动补拍跳过：%s 尚无状态（等首次状态事件）", entity)
+            return
+        if (to_state and current.state != to_state) or (
+            from_state and current.state == from_state
+        ):
+            _LOGGER.debug(
+                "启动补拍跳过：%s 当前 %s 不满足过滤 (from=%r, to=%r)",
+                entity, current.state, from_state, to_state,
+            )
+            return
+        try:
+            self.snapshot()
+        except Exception:
+            _LOGGER.exception("启动补拍失败（已忽略，等下次状态事件）")
 
     async def _setup_duration_trigger(self):
         """Trigger after entity has been in a state for a duration."""
@@ -220,6 +258,9 @@ class WaterHeaterOptimizer:
         except (ValueError, TypeError):
             _LOGGER.warning("Invalid inlet temperature value: %s", state.state)
             return
+        if not math.isfinite(tap_temp):
+            _LOGGER.warning("Non-finite inlet temperature %r, skipping snapshot", state.state)
+            return
 
         self.reference_tap_temp = tap_temp
         self.recommended_temp = self.calculate(tap_temp)
@@ -253,27 +294,31 @@ class WaterHeaterOptimizer:
 
         target = self.recommended_temp
         heater_state = self.hass.states.get(heater)
-        if heater_state is not None:
-            # 按目标设备自身限值夹紧 (M2)
-            try:
-                lo = heater_state.attributes.get("min_temp")
-                hi = heater_state.attributes.get("max_temp")
-                if lo is not None:
-                    target = max(target, math.ceil(float(lo)))
-                if hi is not None:
-                    target = min(target, math.floor(float(hi)))
-            except (TypeError, ValueError):
-                pass
-            current = heater_state.attributes.get("temperature")
-            try:
-                if current is not None and abs(float(current) - target) <= self.APPLY_HYSTERESIS_C:
-                    _LOGGER.debug(
-                        "热水器当前设定 %.1f°C 与推荐值差值在迟滞范围内，跳过下发",
-                        float(current),
-                    )
-                    return False
-            except (TypeError, ValueError):
-                pass
+        if heater_state is None:
+            # 热水器实体缺席时无法夹紧设备限值也无法做迟滞比较，
+            # 盲发原始推荐值有风险——记日志跳过，等下一次快照重试
+            _LOGGER.debug("热水器 %s 状态缺席，跳过下发", heater)
+            return False
+        # 按目标设备自身限值夹紧 (M2)
+        try:
+            lo = heater_state.attributes.get("min_temp")
+            hi = heater_state.attributes.get("max_temp")
+            if lo is not None:
+                target = max(target, math.ceil(float(lo)))
+            if hi is not None:
+                target = min(target, math.floor(float(hi)))
+        except (TypeError, ValueError):
+            pass
+        current = heater_state.attributes.get("temperature")
+        try:
+            if current is not None and abs(float(current) - target) <= self.APPLY_HYSTERESIS_C:
+                _LOGGER.debug(
+                    "热水器当前设定 %.1f°C 与推荐值差值在迟滞范围内，跳过下发",
+                    float(current),
+                )
+                return False
+        except (TypeError, ValueError):
+            pass
         try:
             await self.hass.services.async_call(
                 "water_heater",
