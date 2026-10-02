@@ -120,6 +120,10 @@ data:
 
 ## 故障排除 / Troubleshooting
 
+**Q: 改了目标温度/比例，推荐值没变？**  
+**A:** 推荐值基于"最近一次快照的进水温度"计算，修改参数会立即按该值重算；刚重启/重载条目后还没有任何快照时，参数已生效但推荐值要等下一次快照（或手动调用 `take_snapshot`）才刷新。  
+**A:** The recommendation is based on the last snapshot's inlet temperature and recalculates immediately on change; right after a restart/reload (no snapshot yet), the change takes effect but the displayed value refreshes on the next snapshot (or a manual `take_snapshot`).
+
 **Q: 推荐温度看起来太低/太高。**  
 **A:** 调整**热水比例**。比例越低，推荐温度越高（越保守）；比例越高，推荐温度越低（越激进）。  
 Adjust the **Hot Water Ratio**. Lower ratio = higher recommended temperature (more conservative). Higher ratio = lower recommended temperature (more aggressive).
