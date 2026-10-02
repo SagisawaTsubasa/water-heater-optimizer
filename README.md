@@ -77,6 +77,10 @@ Calculated optimal heater outlet temperature. |
 Last captured inlet water temperature. |
 | `switch.{name}_auto_adjust` | Switch | 是否自动将推荐温度下发到热水器。  
 Toggle automatic application of the recommended temperature. |
+| `number.{name}_target_temperature` | Number | 淋浴目标温度，可直接修改并立即生效（30~60°C，写入条目配置，重启保留）。  
+Shower target temperature, directly adjustable with immediate effect (30~60°C, persisted in the entry, survives restarts). |
+| `number.{name}_hot_water_ratio` | Number | 热水比例，可直接修改并立即生效（0.30~0.95，写入条目配置，重启保留）。  
+Hot water ratio, directly adjustable with immediate effect (0.30~0.95, persisted in the entry, survives restarts). |
 
 ---
 
@@ -132,6 +136,22 @@ Yes. Add two optimizer instances, both pointing to the same inlet sensor but dif
 ---
 
 ## 更新日志 / Changelog
+
+### 0.3.0
+> 已知待办（经审查评估延后）：forced 下发的服务调用在飞期间若进水传感器恰好上报，可能多发一条同值的 `set_temperature`（毫秒级窗口，存量类，概率 ~10⁻⁴~10⁻³/次改参，无振荡无风暴；2026-10-02 第三轮审查确认）  
+> Known deferred: a millisecond window during an in-flight apply can send one redundant same-value `set_temperature` (pre-existing, reviewed and accepted)
+- 新增：目标温度与热水比例以 `number` 实体暴露，可直接在仪表盘/更多信息对话框修改，立即生效  
+  Added: target temperature and hot water ratio are now exposed as `number` entities, directly adjustable with immediate effect
+- 改这两个参数不再触发条目重载（此前每次修改都会重建实体与触发器）；仅这两个键变化时走热应用路径，触发器等结构性配置变化仍照常重载  
+  Changing these two no longer reloads the config entry (previously every change rebuilt entities and triggers); only these keys hot-apply, structural config changes still reload
+- 修改参数后用最近一次快照的进水温度重算推荐值；自动调节开启时经 1.5 秒去抖合并后立即下发（绕过下发冷却，保留迟滞与设备限值夹紧）  
+  After a change the recommendation is recalculated from the last snapshot; with auto-adjust on it applies after a 1.5 s debounce (bypassing the cooldown, hysteresis and device clamping still in effect)
+- 数值写入条目配置（`entry.options`），HA 重启后保留；范围与配置流程一致（30~60°C / 0.30~0.95），拖动值按步长对齐  
+  Values are written to the entry options and survive restarts; ranges match the config flow (30~60°C / 0.30~0.95), inputs snap to the step
+- 修复（存量）：时长触发与启动补拍的回调此前被 HA 判为线程池任务执行，HA 2026.1 起跨线程检查会让时长触发整体失效、启动补拍报错；现已改为事件循环回调（`@callback`）  
+  Fixed (pre-existing): duration-trigger and startup-snapshot callbacks were dispatched to the executor thread and broke under HA 2026.1's thread checks; they are now proper event-loop callbacks
+- 修复：条目改名后实体/设备名照常刷新（标题/数据变化仍走重载，仅这两个可调参数走热应用）  
+  Fixed: entity/device names refresh after renaming the entry (title/data changes still reload; only the two tunable parameters hot-apply)
 
 ### 0.2.1
 - 修复：实体状态触发在 HA 启动完成（或条目重载）后补拍一次快照——此前要等进水温度传感器下次状态变化才有数据，夜间进水温度几乎不变，推荐/参考温度传感器会长期 unknown。启动补拍经 `async_at_started` 延后到各集成状态就绪，并尊重 from/to_state 过滤口径  

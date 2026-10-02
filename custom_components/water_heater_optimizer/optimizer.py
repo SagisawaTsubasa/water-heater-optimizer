@@ -1,5 +1,6 @@
 """Core optimizer logic."""
 
+import asyncio
 import logging
 import math
 import time
@@ -49,19 +50,26 @@ class WaterHeaterOptimizer:
     APPLY_HYSTERESIS_C = 1.0
     # 两次下发之间的最小间隔（秒）
     APPLY_COOLDOWN_S = 300
+    # 热应用 forced 下发的去抖（秒）：合并同轮/连续的参数写入
+    LIVE_APPLY_DEBOUNCE_S = 1.5
 
     def __init__(self, hass: HomeAssistant, entry):
         self.hass = hass
         self.entry = entry
         # Options (re-configured values) take priority over initial setup data
         self.config = {**entry.data, **entry.options}
+        # update listener 用来 diff 前后 options/title/data，判断是热应用还是重载
+        self.last_options = dict(entry.options)
+        self.last_data = dict(entry.data)
+        self.last_title = entry.title
         self.recommended_temp = None
         self.reference_tap_temp = None
         self.auto_adjust = False
         self.applied_temp = None
         self._listeners = []
         self._duration_timer = None
-        self._apply_task = None
+        self._live_apply_timer = None
+        self._apply_tasks: set[asyncio.Task] = set()
         self._last_apply_mono = None
         self._signal = f"{SIGNAL_UPDATE}_{entry.entry_id}"
 
@@ -117,8 +125,24 @@ class WaterHeaterOptimizer:
             unsub()
         self._listeners.clear()
         self._cancel_duration_timer()
-        if self._apply_task is not None and not self._apply_task.done():
-            self._apply_task.cancel()
+        self._cancel_live_apply_timer()
+        for task in self._apply_tasks:
+            task.cancel()
+
+    def _spawn_apply(self, coro) -> None:
+        """创建下发任务并统一跟踪。
+
+        单槽引用会被后续任务覆盖，更早的在飞任务会逃过卸载取消；
+        集合 + done_callback 自动清位，卸载时全部 cancel。
+        """
+        task = self.hass.async_create_task(coro)
+        self._apply_tasks.add(task)
+        task.add_done_callback(self._apply_tasks.discard)
+
+    def _cancel_live_apply_timer(self):
+        if self._live_apply_timer is not None:
+            self._live_apply_timer()
+            self._live_apply_timer = None
 
     def _cancel_duration_timer(self):
         if self._duration_timer is not None:
@@ -158,13 +182,16 @@ class WaterHeaterOptimizer:
         # unavailable/unknown 防御。注意 auto_adjust 此时恒为 False（开关
         # 恢复发生在平台转发阶段且直接赋值，不走 async_set_auto_adjust），
         # 因此补拍绝不会导致重启即下发。
-        self._listeners.append(
-            async_at_started(
-                self.hass,
-                lambda _hass: self._startup_snapshot(entity, from_state, to_state),
-            )
-        )
+        @callback
+        def _at_started_cb(_hass):
+            self._startup_snapshot(entity, from_state, to_state)
 
+        # 回调必须 @callback：裸函数/lambda 会被 HA 判为 Executor job 放进
+        # 线程池执行，snapshot 里的 dispatcher 与实体刷新会触发跨线程
+        # RuntimeError（HA 2026.1 起 frame 检查直抛）。下同，不逐一重复
+        self._listeners.append(async_at_started(self.hass, _at_started_cb))
+
+    @callback
     def _startup_snapshot(self, entity: str, from_state: str | None, to_state: str | None):
         """Take one snapshot after HA started if the current state qualifies."""
         current = self.hass.states.get(entity)
@@ -190,13 +217,15 @@ class WaterHeaterOptimizer:
         to_state = self.config.get(CONF_TRIGGER_TO_STATE)
         duration = self.config.get(CONF_TRIGGER_DURATION, 120)
 
+        @callback
+        def _fire_snapshot(_now):
+            self.snapshot()
+
         def _schedule():
             # 先取消旧定时器再挂新的：同一状态的重复事件（属性更新等）
             # 不再堆叠 N 个到期快照 (H2)
             self._cancel_duration_timer()
-            self._duration_timer = async_call_later(
-                self.hass, duration, lambda _now: self.snapshot()
-            )
+            self._duration_timer = async_call_later(self.hass, duration, _fire_snapshot)
 
         @callback
         def _state_changed(event):
@@ -245,6 +274,7 @@ class WaterHeaterOptimizer:
             async_track_time_change(self.hass, _time_trigger, hour=hour, minute=minute)
         )
 
+    @callback
     def snapshot(self):
         """Read inlet temperature and update reference."""
         sensor = self.config[CONF_INLET_TEMP_SENSOR]
@@ -273,20 +303,26 @@ class WaterHeaterOptimizer:
         async_dispatcher_send(self.hass, self._signal)
 
         if self.auto_adjust and self.recommended_temp is not None:
-            # 保存任务引用，卸载时可取消 (M2)
-            self._apply_task = self.hass.async_create_task(self._apply_temperature())
+            if self._live_apply_timer is not None:
+                # 热应用去抖窗口内：待发的 forced 下发执行时读到的正是这里
+                # 刚算出的最新推荐值，合并成一次下发即可
+                _LOGGER.debug("热应用去抖窗口内，快照下发与 forced 下发合并")
+                return
+            self._spawn_apply(self._apply_temperature())
 
-    async def _apply_temperature(self) -> bool:
+    async def _apply_temperature(self, force: bool = False) -> bool:
         """Apply recommended temperature to water heater.
 
         带迟滞与冷却：当前设定已接近推荐值、或距上次下发太近时跳过，
         避免进水温度传感器每次上报都向热水器发一条 set_temperature (H3)。
+        force=True 跳过冷却但保留迟滞（用于用户主动改参数后的立即下发）。
         Returns True when a command was actually sent.
         """
         heater = self.config[CONF_WATER_HEATER]
         now_mono = time.monotonic()
         if (
-            self._last_apply_mono is not None
+            not force
+            and self._last_apply_mono is not None
             and (now_mono - self._last_apply_mono) < self.APPLY_COOLDOWN_S
         ):
             _LOGGER.debug("下发冷却期内，跳过 set_temperature")
@@ -338,9 +374,60 @@ class WaterHeaterOptimizer:
         async_dispatcher_send(self.hass, self._signal)
         return True
 
+    def set_live_config(self, key: str, value) -> None:
+        """把可调参数写入 entry.options（持久化，重启后保留）。
+
+        不在这里热应用：update listener 会 diff 前后 options，
+        只有可调参数变化时调 apply_live_config()，否则照常重载条目。
+        值未变化时 async_update_entry 是 no-op，不会触发 listener。
+        """
+        self.hass.config_entries.async_update_entry(
+            self.entry, options={**self.entry.options, key: value}
+        )
+
+    def apply_live_config(self):
+        """热应用可调参数（target_temp / hot_water_ratio），不重载条目。
+
+        用最近一次快照的进水温度重算推荐值；自动调节开启时立即下发
+        （绕过下发冷却——这是用户主动动作，不是传感器风暴；迟滞与
+        设备限值夹紧仍然生效，避免无意义的重复 set_temperature）。
+        """
+        self.config = {**self.entry.data, **self.entry.options}
+        self.last_options = dict(self.entry.options)
+        self.last_data = dict(self.entry.data)
+        self.last_title = self.entry.title
+        if self.reference_tap_temp is not None:
+            self.recommended_temp = self.calculate(self.reference_tap_temp)
+            _LOGGER.info(
+                "参数已热更新: target=%s°C, ratio=%s → recommended=%s°C",
+                self.config.get(CONF_TARGET_TEMP),
+                self.config.get(CONF_HOT_WATER_RATIO),
+                self.recommended_temp,
+            )
+        async_dispatcher_send(self.hass, self._signal)
+        if self.auto_adjust and self.recommended_temp is not None:
+            # forced 下发做短去抖：连续多次参数写入（脚本并行、前端连续上报）
+            # 只保留最后一次，避免多个任务在热水器回读温度前全部通过迟滞检查、
+            # 各发一条真实 set_temperature；卸载时连定时器带任务一起取消
+            self._cancel_live_apply_timer()
+            self._live_apply_timer = async_call_later(
+                self.hass, self.LIVE_APPLY_DEBOUNCE_S, self._fire_live_apply
+            )
+
+    @callback
+    def _fire_live_apply(self, _now) -> None:
+        self._live_apply_timer = None
+        if not self.auto_adjust:
+            # 去抖窗口内用户关掉了自动调节，撤单
+            return
+        self._spawn_apply(self._apply_temperature(force=True))
+
     async def async_set_auto_adjust(self, enabled: bool):
         """Enable or disable auto-adjust."""
         self.auto_adjust = enabled
+        if not enabled:
+            # 去抖窗口内改参数又关开关：撤掉挂起的 forced 下发
+            self._cancel_live_apply_timer()
         if enabled and self.recommended_temp is not None:
             await self._apply_temperature()
         async_dispatcher_send(self.hass, self._signal)

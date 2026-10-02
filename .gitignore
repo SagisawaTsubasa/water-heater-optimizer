@@ -12,6 +12,9 @@ venv/
 coverage.xml
 htmlcov/
 
+# Pre-change backups (local only)
+.backup-pre-fix-*/
+
 # OS / editor
 .DS_Store
 Thumbs.db
