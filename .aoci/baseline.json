@@ -1,0 +1,201 @@
+{
+  "version": 1,
+  "created_at": "2026-10-28T18:29:21Z",
+  "updated_at": "2026-10-28T18:30:42Z",
+  "files": {
+    ".gitattributes": {
+      "role": "index",
+      "sha256": "21fa16a2122e2b0360b47502c577428b645437e08e9e87ffba661f84853cb476",
+      "size": 291,
+      "normalized_sha256": "21fa16a2122e2b0360b47502c577428b645437e08e9e87ffba661f84853cb476"
+    },
+    ".gitignore": {
+      "role": "index",
+      "sha256": "5f614cb78041c9e25682926d0b77483e9c28bebf22313792c3a5e169e3cd8b5f",
+      "size": 267,
+      "normalized_sha256": "c3d9a62b1d574bd1bf758e117d1e2fd6313f9eea00531c8a03652d007b11895d"
+    },
+    "AGENTS.md": {
+      "role": "index",
+      "sha256": "ddb50101a5be7eb54bde0bdccb2ce15fbac13a0efed1b2851adc248c7a39bcb7",
+      "size": 13258,
+      "normalized_sha256": "ddb50101a5be7eb54bde0bdccb2ce15fbac13a0efed1b2851adc248c7a39bcb7"
+    },
+    "LICENSE": {
+      "role": "index",
+      "sha256": "2c3f7834ca0df5f5f1d9e5d73e89990e0c4b62b3b63eb0e5bac56f1fae5d9922",
+      "size": 1093,
+      "normalized_sha256": "9c0e85af7766dffc5d5acdf284bc720841e6caceee2a688d018a8339f41aa759"
+    },
+    "README.md": {
+      "role": "index",
+      "sha256": "f1e262ea162fa0b6396fb0aafd8bd4eb515e2e789ba3a89fc7cf29ef2a52891b",
+      "size": 13071,
+      "normalized_sha256": "f1e262ea162fa0b6396fb0aafd8bd4eb515e2e789ba3a89fc7cf29ef2a52891b"
+    },
+    "aoci.code.txt": {
+      "role": "index",
+      "sha256": "a26414d2e64dee92504fc6bd162ac146c030acf93a253ae4cdbff7e0e127e868",
+      "size": 6125,
+      "normalized_sha256": "a26414d2e64dee92504fc6bd162ac146c030acf93a253ae4cdbff7e0e127e868"
+    },
+    "aoci.meta.txt": {
+      "role": "index",
+      "sha256": "fbc304fa05182547e96f1f8404c7c30ad6c366bba9589523f1019c2c1da0427c",
+      "size": 1989,
+      "normalized_sha256": "fbc304fa05182547e96f1f8404c7c30ad6c366bba9589523f1019c2c1da0427c"
+    },
+    "aoci.txt": {
+      "role": "index",
+      "sha256": "2ed7762af9e3e17bfa3ef75bb57fc1e1b88e866f8a988f07db377892d33f3325",
+      "size": 311,
+      "normalized_sha256": "2ed7762af9e3e17bfa3ef75bb57fc1e1b88e866f8a988f07db377892d33f3325"
+    },
+    "custom_components/water_heater_optimizer/__init__.py": {
+      "role": "index",
+      "sha256": "4f1436c6b0b7262bb0318ed7f2282af05dae436ae7e638be295d124bd3ddea05",
+      "size": 3804,
+      "normalized_sha256": "4f1436c6b0b7262bb0318ed7f2282af05dae436ae7e638be295d124bd3ddea05"
+    },
+    "custom_components/water_heater_optimizer/config_flow.py": {
+      "role": "index",
+      "sha256": "a29ca913830e2642b011b280242df4da90e54abe5739cc52f7aadd563a674858",
+      "size": 13277,
+      "normalized_sha256": "a29ca913830e2642b011b280242df4da90e54abe5739cc52f7aadd563a674858"
+    },
+    "custom_components/water_heater_optimizer/const.py": {
+      "role": "index",
+      "sha256": "b8257840f5e48b8e7ff3ff6a49e73d2cbdc766f2b08ee5a2e76f0c075353ed0d",
+      "size": 1040,
+      "normalized_sha256": "b8257840f5e48b8e7ff3ff6a49e73d2cbdc766f2b08ee5a2e76f0c075353ed0d"
+    },
+    "custom_components/water_heater_optimizer/manifest.json": {
+      "role": "index",
+      "sha256": "3d03db7588ed02d3e3b26487e103aede899f2826d2e7d8cd14c02ede0d05c18d",
+      "size": 422,
+      "normalized_sha256": "4f4e3bd3a65ed327d88912ec69e2041d54d644d2f45707ab32e6bdcc7e8ba028"
+    },
+    "custom_components/water_heater_optimizer/number.py": {
+      "role": "index",
+      "sha256": "b6938f2dde80549cb2d210013fa7e4513e63ab3f5c0845b19c3d2a7e408d2ddf",
+      "size": 3720,
+      "normalized_sha256": "b6938f2dde80549cb2d210013fa7e4513e63ab3f5c0845b19c3d2a7e408d2ddf"
+    },
+    "custom_components/water_heater_optimizer/optimizer.py": {
+      "role": "index",
+      "sha256": "cf2ba7fe50d8e9f6a22e3775b248e0b95d829bbccd24163797b84bbdda9f7b9d",
+      "size": 18112,
+      "normalized_sha256": "cf2ba7fe50d8e9f6a22e3775b248e0b95d829bbccd24163797b84bbdda9f7b9d"
+    },
+    "custom_components/water_heater_optimizer/sensor.py": {
+      "role": "index",
+      "sha256": "efef2e56b509002309211e7f6204b42bcbeb5cc3b53fe8ce39fc0818f0b8b04e",
+      "size": 3669,
+      "normalized_sha256": "efef2e56b509002309211e7f6204b42bcbeb5cc3b53fe8ce39fc0818f0b8b04e"
+    },
+    "custom_components/water_heater_optimizer/services.yaml": {
+      "role": "index",
+      "sha256": "c6a787256044fef7627541c5731acebb1d18220c7380cf317768e160784e0aee",
+      "size": 273,
+      "normalized_sha256": "c6a787256044fef7627541c5731acebb1d18220c7380cf317768e160784e0aee"
+    },
+    "custom_components/water_heater_optimizer/strings.json": {
+      "role": "index",
+      "sha256": "3360138ce052cbcbaa30aef76ddf4f073d8bd5c1849f595ca18d8c6fa391891f",
+      "size": 2847,
+      "normalized_sha256": "3360138ce052cbcbaa30aef76ddf4f073d8bd5c1849f595ca18d8c6fa391891f"
+    },
+    "custom_components/water_heater_optimizer/switch.py": {
+      "role": "index",
+      "sha256": "c98ccffc6f4ab8aa99a3410601f930d6f18a3f44f5e0b8513301918a45253524",
+      "size": 2390,
+      "normalized_sha256": "c98ccffc6f4ab8aa99a3410601f930d6f18a3f44f5e0b8513301918a45253524"
+    },
+    "custom_components/water_heater_optimizer/translations/zh-Hans.json": {
+      "role": "index",
+      "sha256": "d4a70a7a392ef059fb4eb143bc80633e093616e6f77c3689f0d3fb17ad159055",
+      "size": 2788,
+      "normalized_sha256": "ea83bbbdcfebdaa868400f198624354118a626b884104bd9c86e2d074e5ba927"
+    },
+    "custom_components/water_heater_optimizer/translations/zh.json": {
+      "role": "index",
+      "sha256": "d4a70a7a392ef059fb4eb143bc80633e093616e6f77c3689f0d3fb17ad159055",
+      "size": 2788,
+      "normalized_sha256": "ea83bbbdcfebdaa868400f198624354118a626b884104bd9c86e2d074e5ba927"
+    },
+    "hacs.json": {
+      "role": "index",
+      "sha256": "e4fcdabc26baad33b32d0c3606d6a3bc5bf8eceee436a11874831087afe49c20",
+      "size": 96,
+      "normalized_sha256": "e4fcdabc26baad33b32d0c3606d6a3bc5bf8eceee436a11874831087afe49c20"
+    }
+  },
+  "managed_scope": {
+    "version": "managed-scope-baseline/v1",
+    "policy_identity": "3b029307ca9a998f7863146b9aae29089dbd7d695d8e543a5334a9ba32f41394",
+    "observe_change_policy": "review_required",
+    "budget_policy_identity": "15e9b37a6c57e9bf03c9df3d0d049eb5b9a7f5540f9d34960408114e2538a32d",
+    "budget_policy": {
+      "version": "cognition-budget-policy/v1",
+      "mode": "enforce",
+      "whole_index": {
+        "target_tokens": 200000,
+        "warning_tokens": 300000,
+        "max_tokens": 400000
+      },
+      "r": [
+        {
+          "min_c": 1,
+          "max_c": 4,
+          "target_tokens": 25,
+          "max_tokens": 50
+        },
+        {
+          "min_c": 5,
+          "max_c": 7,
+          "target_tokens": 45,
+          "max_tokens": 90
+        },
+        {
+          "min_c": 8,
+          "max_c": 8,
+          "target_tokens": 70,
+          "max_tokens": 140
+        },
+        {
+          "min_c": 9,
+          "max_c": 9,
+          "target_tokens": 90,
+          "max_tokens": 180
+        }
+      ],
+      "s": [
+        {
+          "min_c": 1,
+          "max_c": 4,
+          "target_tokens": 20,
+          "max_tokens": 40
+        },
+        {
+          "min_c": 5,
+          "max_c": 7,
+          "target_tokens": 40,
+          "max_tokens": 80
+        },
+        {
+          "min_c": 8,
+          "max_c": 8,
+          "target_tokens": 70,
+          "max_tokens": 140
+        },
+        {
+          "min_c": 9,
+          "max_c": 9,
+          "target_tokens": 100,
+          "max_tokens": 200
+        }
+      ]
+    },
+    "apply_authorization_mode": "off"
+  }
+}

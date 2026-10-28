@@ -1,0 +1,25 @@
+#AOCI-CODE-VOLUME: 1
+
+===D:/project/Github/HA/water-heater-optimizer/===
+.gitattributes[XV2T]: F:强制全仓文本以 LF 检出（* text=auto eol=lf），二进制自动豁免，保 AOCI 基线跨平台逐字节一致 | R:- | A:- | S:-
+.gitignore[XV1T]: F:忽略 Python 缓存、工具缓存、OS/编辑器本地产物与 .backup-pre-fix-*/ 改前备份目录 | R:- | A:- | S:备份目录刻意只留本地不入库（改前快照），勿误当缺失条目
+AGENTS.md[SG5S]: F:AOCI 仓库认知接入说明（aoci:begin/end 托管块）：认知建立、复用与维护原则及最小工具入口 | R:code:aoci.txt | A:- | S:托管内容在 aoci:begin/end 标记之间，更新走 AOCI 收尾流程，手工编辑会被覆盖
+LICENSE[SG1T]: F:MIT 许可证全文（Copyright 2026 SagisawaTsubasa） | R:- | A:- | S:-
+README.md[SG7M]: F:项目主文档（中英双语）：按进水温度动态计算燃气热水器最佳出口温度的原理、配置向导说明、实体清单、HACS/手动安装、Kimi 主程署名 | R:code:custom_components/water_heater_optimizer/optimizer.py,code:custom_components/water_heater_optimizer/config_flow.py | A:- | S:-
+hacs.json[FV3T]: F:HACS 仓库配置：名称 Water Heater Optimizer、最低 HA 2024.11.0、render_readme | R:- | A:- | S:-
+
+===D:/project/Github/HA/water-heater-optimizer/custom_components/water_heater_optimizer/===
+__init__.py[EB8S]: F:集成总入口：建 Optimizer 装触发器、三平台转发、take_snapshot 服务（has_service 守卫+末 entry 注销）、update listener diff 分流（热应用 vs 重载） | R:code:custom_components/water_heater_optimizer/optimizer.py,code:custom_components/water_heater_optimizer/const.py | A:async_setup_entry,async_unload_entry,_async_update_listener | S:①listener diff options/data/title：仅 _LIVE_KEYS（目标温度/热水比例）变化走热应用不重载——防拖 number 整条目重载实体闪断；②结构性变化走 async_schedule_reload（先取消 setup retry 消竞态）；③无变化早退守卫防重复回调打回重载
+config_flow.py[EU7M]: F:配置/选项流：热水器+进水温度传感器+目标温度/比例+三种触发类型（实体状态/持续时长/每日定时）分步向导，按触发类型清理不适用配置键 | R:code:custom_components/water_heater_optimizer/const.py,code:custom_components/water_heater_optimizer/optimizer.py | A:async_step_user | S:_TRIGGER_KEY_MAP 切换触发类型后清掉其余类型的键（L6），残留键不会误触发
+const.py[CC5T]: F:集成常量：DOMAIN、热水器/进水温度/目标温度/比例/触发五件套配置键、触发类型三枚举、SIGNAL_UPDATE 模板、温度默认值 | R:- | A:- | S:SIGNAL_UPDATE 是带 {} 占位的模板，经 .format(entry_id) 使用
+manifest.json[FV3T]: F:集成清单：domain=water_heater_optimizer、version 0.3.0、iot_class=local_push、requirements 空 | R:- | A:- | S:-
+number.py[EU7S]: F:number 平台：目标温度与热水比例两可调实体（范围与 config_flow 选择器一致），读 optimizer.config、写 set_live_config 落 entry.options | R:code:custom_components/water_heater_optimizer/optimizer.py,code:custom_components/water_heater_optimizer/const.py | A:async_setup_entry | S:写入持久化并经 listener 热应用不重载条目；值未变化时 async_update_entry 是 no-op 不触发 listener
+optimizer.py[DB9L]: F:核心优化器：snapshot 读进水温度→calculate 推荐=进水+（目标-进水）/热水比例夹紧窗口→auto_adjust 开启时按迟滞/冷却下发 set_temperature；三种触发器（实体状态含 from/to 过滤+启动补拍、时长定时、每日定时）；参数热应用与 forced 下发去抖 | R:code:custom_components/water_heater_optimizer/__init__.py,code:custom_components/water_heater_optimizer/const.py,code:custom_components/water_heater_optimizer/sensor.py,code:custom_components/water_heater_optimizer/number.py,code:custom_components/water_heater_optimizer/switch.py | A:snapshot,calculate,_apply_temperature,apply_live_config,async_set_auto_adjust,_spawn_apply | S:①下发三闸=设备 min/max_temp 夹紧+1°C 迟滞+300s 冷却（force 跳冷却保迟滞）；②热应用 forced 下发 1.5s 去抖合并连续参数写入，去抖窗口内快照并入待发；③手改 storage 绕选择器：ratio≤0 拒算、min/max 自动互换；④启动补拍经 async_at_started 且彼时 auto_adjust 恒 False——绝不重启即下发；⑤回调必须 @callback，裸函数被 HA 判 Executor 跨线程 RuntimeError（2026.1 frame 检查实测）
+sensor.py[EU7S]: F:sensor 平台：推荐温度与参考进水温度两实体（TEMPERATURE class，属性带 applied_temp），dispatcher 驱动 | R:code:custom_components/water_heater_optimizer/optimizer.py,code:custom_components/water_heater_optimizer/const.py | A:async_setup_entry | S:RestoreEntity 恢复上次读数——下次快照前不 unknown；should_poll=False
+services.yaml[FU3T]: F:take_snapshot 服务声明：entry_id 必填文本（手动触发一次温度快照） | R:code:custom_components/water_heater_optimizer/__init__.py | A:- | S:-
+strings.json[FL3T]: F:文案源：config 步骤/错误与实体名 | R:code:custom_components/water_heater_optimizer/config_flow.py | A:- | S:与 translations/zh.json（中文）不同文，本件为英文/默认文案
+switch.py[EU6T]: F:Auto Adjust 开关：开=快照后自动下发推荐温度、关=只算不下发 | R:code:custom_components/water_heater_optimizer/optimizer.py,code:custom_components/water_heater_optimizer/const.py | A:async_setup_entry,async_turn_on,async_turn_off | S:RestoreEntity 只认 on/off 字面量恢复——unavailable/unknown 忽略而非静默关掉
+
+===D:/project/Github/HA/water-heater-optimizer/custom_components/water_heater_optimizer/translations/===
+zh-Hans.json[FL4T]: F:简中文案 | R:code:custom_components/water_heater_optimizer/strings.json | A:- | S:与 translations/zh.json 逐字节相同（双语键名冗余），改动须双写同步
+zh.json[FL4T]: F:zh 本地化文件 | R:- | A:- | S:与 zh-Hans.json 逐字节相同，改动须两处同步
