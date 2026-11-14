@@ -13,7 +13,7 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 
-from .const import ATTR_REFERENCE_TAP_TEMP, DOMAIN, SIGNAL_UPDATE
+from .const import CONF_INLET_TEMP_SENSOR, DOMAIN, SIGNAL_UPDATE
 
 
 async def async_setup_entry(
@@ -23,10 +23,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up sensors."""
     optimizer = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([
-        RecommendedTempSensor(optimizer, entry),
-        ReferenceTapTempSensor(optimizer, entry),
-    ])
+    async_add_entities([RecommendedTempSensor(optimizer, entry)])
 
 
 def _device_info(entry: ConfigEntry) -> DeviceInfo:
@@ -62,7 +59,7 @@ class _OptimizerSensor(SensorEntity, RestoreEntity):
                 self.async_write_ha_state,
             )
         )
-        # 重启后先恢复上次读数，避免在下次快照前一直 unknown
+        # 重启后先恢复上次读数，避免在下次均值变化前一直 unknown
         last_state = await self.async_get_last_state()
         if last_state is not None and last_state.state not in (
             STATE_UNKNOWN,
@@ -97,17 +94,7 @@ class RecommendedTempSensor(_OptimizerSensor):
     @property
     def extra_state_attributes(self):
         return {
-            ATTR_REFERENCE_TAP_TEMP: self._optimizer.reference_tap_temp,
+            # avg 源实体指针（24h 均值 filter 实体）：从实体详情页可直达数据源
+            "inlet_temp_sensor": self._optimizer.config.get(CONF_INLET_TEMP_SENSOR),
             "applied_temp": self._optimizer.applied_temp,
         }
-
-
-class ReferenceTapTempSensor(_OptimizerSensor):
-    """Reference tap water temperature from last snapshot."""
-
-    TITLE_SUFFIX = "Reference Tap Temperature"
-    UNIQUE_SUFFIX = "reference_tap_temp"
-    _attr_icon = "mdi:water-thermometer"
-
-    def _current_value(self):
-        return self._optimizer.reference_tap_temp

@@ -2,19 +2,12 @@
 
 import logging
 
-import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
 
-from .const import (
-    CONF_HOT_WATER_RATIO,
-    CONF_TARGET_TEMP,
-    DOMAIN,
-    SERVICE_TAKE_SNAPSHOT,
-)
+from .const import CONF_HOT_WATER_RATIO, CONF_TARGET_TEMP, DOMAIN
 from .optimizer import WaterHeaterOptimizer
 
 _LOGGER = logging.getLogger(__name__)
@@ -23,8 +16,6 @@ PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.SWITCH, Platform.NUMBER]
 
 # 可由 number 实体运行时直接改的键：仅这些键变化时不重载条目，走热应用
 _LIVE_KEYS = frozenset({CONF_TARGET_TEMP, CONF_HOT_WATER_RATIO})
-
-TAKE_SNAPSHOT_SCHEMA = vol.Schema({vol.Required("entry_id"): cv.string})
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
@@ -44,20 +35,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    if not hass.services.has_service(DOMAIN, SERVICE_TAKE_SNAPSHOT):
-
-        async def _handle_snapshot(call):
-            entry_id = call.data.get("entry_id")
-            inst = hass.data.get(DOMAIN, {}).get(entry_id)
-            if inst is not None:
-                inst.snapshot()
-            else:
-                _LOGGER.warning("Optimizer entry %s not found", entry_id)
-
-        hass.services.async_register(
-            DOMAIN, SERVICE_TAKE_SNAPSHOT, _handle_snapshot, schema=TAKE_SNAPSHOT_SCHEMA
-        )
-
     return True
 
 
@@ -65,8 +42,8 @@ async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> Non
     """Handle options update.
 
     只有可调参数（目标温度/热水比例）变化时热应用，避免拖动 number
-    实体触发整条目重载（实体瞬间不可用 + 触发器重建）；标题、data 等
-    结构性变化（实体名/设备配置来源）仍走完整重载。
+    实体触发整条目重载（实体瞬间不可用 + 监听重建）；标题、data 等
+    结构性变化（实体配置来源）仍走完整重载。
     """
     optimizer = hass.data.get(DOMAIN, {}).get(entry.entry_id)
     if optimizer is not None:
@@ -96,6 +73,4 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         optimizer = hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
         if optimizer is not None:
             await optimizer.async_unload()
-        if not hass.data.get(DOMAIN):
-            hass.services.async_remove(DOMAIN, SERVICE_TAKE_SNAPSHOT)
     return unload_ok

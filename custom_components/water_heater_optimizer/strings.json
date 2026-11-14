@@ -4,26 +4,14 @@
     "step": {
       "user": {
         "title": "Water Heater Optimizer",
-        "description": "Configure basic parameters for temperature optimization.",
+        "description": "Configure temperature optimization. Point the average sensor at a 24h moving-average helper (filter) of the inlet temperature.",
         "data": {
           "water_heater": "Target Water Heater",
-          "inlet_temp_sensor": "Inlet Temperature Sensor",
+          "inlet_temp_sensor": "24h Average Inlet Temperature Sensor",
           "target_temp": "Target Shower Temperature",
           "hot_water_ratio": "Hot Water Ratio",
-          "trigger_type": "Snapshot Trigger Type",
           "min_temp": "Recommended Setpoint Minimum",
           "max_temp": "Recommended Setpoint Maximum"
-        }
-      },
-      "trigger": {
-        "title": "Trigger Configuration",
-        "description": "{description}",
-        "data": {
-          "trigger_entity": "Trigger Entity (optional)",
-          "trigger_from_state": "From State",
-          "trigger_to_state": "To State",
-          "trigger_duration": "Duration (seconds)",
-          "trigger_time": "Trigger Time"
         }
       }
     },
@@ -41,49 +29,16 @@
         "description": "Re-configure basic parameters for temperature optimization.",
         "data": {
           "water_heater": "Target Water Heater",
-          "inlet_temp_sensor": "Inlet Temperature Sensor",
+          "inlet_temp_sensor": "24h Average Inlet Temperature Sensor",
           "target_temp": "Target Shower Temperature",
           "hot_water_ratio": "Hot Water Ratio",
-          "trigger_type": "Snapshot Trigger Type",
           "min_temp": "Recommended Setpoint Minimum",
           "max_temp": "Recommended Setpoint Maximum"
-        }
-      },
-      "trigger": {
-        "title": "Trigger Configuration",
-        "description": "{description}",
-        "data": {
-          "trigger_entity": "Trigger Entity (optional)",
-          "trigger_from_state": "From State",
-          "trigger_to_state": "To State",
-          "trigger_duration": "Duration (seconds)",
-          "trigger_time": "Trigger Time"
         }
       }
     },
     "error": {
       "invalid_range": "Minimum temperature ({min_temp}) must be lower than maximum temperature ({max_temp})."
-    }
-  },
-  "services": {
-    "take_snapshot": {
-      "name": "Take snapshot",
-      "description": "Manually trigger a temperature snapshot for an optimizer instance.",
-      "fields": {
-        "entry_id": {
-          "name": "Entry ID",
-          "description": "The config entry ID of the optimizer instance."
-        }
-      }
-    }
-  },
-  "selector": {
-    "trigger_type": {
-      "options": {
-        "entity_state": "Entity State Change",
-        "duration": "Duration",
-        "fixed_time": "Fixed Time"
-      }
     }
   }
 }

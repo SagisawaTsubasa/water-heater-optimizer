@@ -4,34 +4,22 @@
     "step": {
       "user": {
         "title": "热水器温度优化器",
-        "description": "配置温度优化的基本参数。",
+        "description": "配置温度优化的基本参数。平均温度传感器应指向进水温度的 24h 移动平均辅助实体（filter）。",
         "data": {
           "water_heater": "目标热水器",
-          "inlet_temp_sensor": "进水温度传感器",
+          "inlet_temp_sensor": "24h 平均进水温度传感器",
           "target_temp": "目标淋浴温度",
           "hot_water_ratio": "热水比例",
-          "trigger_type": "快照触发类型",
           "min_temp": "推荐设定温度下限",
           "max_temp": "推荐设定温度上限"
         }
-      },
-      "trigger": {
-        "title": "触发条件配置",
-        "description": "{description}",
-        "data": {
-          "trigger_entity": "触发实体（可选）",
-          "trigger_from_state": "从状态",
-          "trigger_to_state": "到状态",
-          "trigger_duration": "持续时间（秒）",
-          "trigger_time": "触发时间"
-        }
       }
-    },
-    "error": {
-      "invalid_range": "最低温度（{min_temp}）必须低于最高温度（{max_temp}）。"
     },
     "abort": {
       "already_configured": "该热水器已配置"
+    },
+    "error": {
+      "invalid_range": "最低温度（{min_temp}）必须低于最高温度（{max_temp}）。"
     }
   },
   "options": {
@@ -41,49 +29,16 @@
         "description": "重新配置温度优化的基本参数。",
         "data": {
           "water_heater": "目标热水器",
-          "inlet_temp_sensor": "进水温度传感器",
+          "inlet_temp_sensor": "24h 平均进水温度传感器",
           "target_temp": "目标淋浴温度",
           "hot_water_ratio": "热水比例",
-          "trigger_type": "快照触发类型",
           "min_temp": "推荐设定温度下限",
           "max_temp": "推荐设定温度上限"
-        }
-      },
-      "trigger": {
-        "title": "触发条件配置",
-        "description": "{description}",
-        "data": {
-          "trigger_entity": "触发实体（可选）",
-          "trigger_from_state": "从状态",
-          "trigger_to_state": "到状态",
-          "trigger_duration": "持续时间（秒）",
-          "trigger_time": "触发时间"
         }
       }
     },
     "error": {
       "invalid_range": "最低温度（{min_temp}）必须低于最高温度（{max_temp}）。"
-    }
-  },
-  "services": {
-    "take_snapshot": {
-      "name": "手动快照",
-      "description": "为指定优化器实例手动触发一次温度快照。",
-      "fields": {
-        "entry_id": {
-          "name": "条目 ID",
-          "description": "优化器实例的配置条目 ID。"
-        }
-      }
-    }
-  },
-  "selector": {
-    "trigger_type": {
-      "options": {
-        "entity_state": "实体状态变化",
-        "duration": "持续时间",
-        "fixed_time": "固定时间"
-      }
     }
   }
 }
