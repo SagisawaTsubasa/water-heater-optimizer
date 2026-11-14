@@ -7,6 +7,7 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.typing import ConfigType
 
+from . import web as web_mod
 from .const import CONF_HOT_WATER_RATIO, CONF_TARGET_TEMP, DOMAIN
 from .optimizer import WaterHeaterOptimizer
 
@@ -29,6 +30,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     optimizer = WaterHeaterOptimizer(hass, entry)
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = optimizer
     await optimizer.async_setup()
+
+    await web_mod.async_setup_web(hass)
 
     # Reload the entry automatically when options are changed
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
@@ -73,4 +76,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         optimizer = hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
         if optimizer is not None:
             await optimizer.async_unload()
+        if not hass.data.get(DOMAIN):
+            web_mod.async_unload_web(hass)
     return unload_ok

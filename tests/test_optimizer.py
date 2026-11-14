@@ -21,6 +21,7 @@ def _install_ha_stubs() -> None:
     ha_const = types.ModuleType("homeassistant.const")
     ha_const.STATE_UNAVAILABLE = "unavailable"
     ha_const.STATE_UNKNOWN = "unknown"
+    ha_const.EVENT_HOMEASSISTANT_STARTED = "homeassistant_started"
 
     class _Platform:
         SENSOR = "sensor"
@@ -39,6 +40,7 @@ def _install_ha_stubs() -> None:
 
     ha_core.HomeAssistant = _HomeAssistant
     ha_core.callback = _callback
+    ha_core.Event = object
 
     ha_exc = types.ModuleType("homeassistant.exceptions")
 
@@ -90,6 +92,47 @@ def _install_ha_stubs() -> None:
     ha_helpers.event = ha_event
     ha_helpers.typing = ha_typing
 
+    # web.py 的 import 面（包 __init__ 会 import web）
+    aiohttp_mod = types.ModuleType("aiohttp")
+    aiohttp_web = types.ModuleType("aiohttp.web")
+
+    class _Request:
+        pass
+
+    class _Response:
+        pass
+
+    aiohttp_web.Request = _Request
+    aiohttp_web.Response = _Response
+    aiohttp_mod.web = aiohttp_web
+
+    ha_components = types.ModuleType("homeassistant.components")
+    ha_http = types.ModuleType("homeassistant.components.http")
+
+    class _HomeAssistantView:
+        url = ""
+        name = ""
+        requires_auth = True
+
+        @staticmethod
+        def json(data):
+            return data
+
+    def _require_admin(fn):
+        return fn
+
+    class _StaticPathConfig:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    ha_http.HomeAssistantView = _HomeAssistantView
+    ha_http.require_admin = _require_admin
+    ha_http.StaticPathConfig = _StaticPathConfig
+    ha_components.http = ha_http
+
+    ha_loader = types.ModuleType("homeassistant.loader")
+    ha_loader.async_get_loaded_integration = lambda hass, domain: None
+
     for name, mod in {
         "homeassistant": ha,
         "homeassistant.const": ha_const,
@@ -100,6 +143,11 @@ def _install_ha_stubs() -> None:
         "homeassistant.helpers.dispatcher": ha_disp,
         "homeassistant.helpers.event": ha_event,
         "homeassistant.helpers.typing": ha_typing,
+        "aiohttp": aiohttp_mod,
+        "aiohttp.web": aiohttp_web,
+        "homeassistant.components": ha_components,
+        "homeassistant.components.http": ha_http,
+        "homeassistant.loader": ha_loader,
     }.items():
         sys.modules[name] = mod
 
