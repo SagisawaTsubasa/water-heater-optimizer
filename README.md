@@ -12,17 +12,19 @@
 ## 安装 / Installation
 
 ### HACS (推荐 / Recommended)
-1. 在 HACS 中添加此仓库为自定义仓库。  
-   Add this repository as a custom repository in HACS.
+1. 在 HACS 中添加自定义仓库 `https://github.com/SagisawaTsubasa/water-heater-optimizer`，类别选**集成 / Integration**。  
+   Add `https://github.com/SagisawaTsubasa/water-heater-optimizer` as a custom repository in HACS, category **Integration**.
 2. 安装 **Water Heater Optimizer**。  
    Install **Water Heater Optimizer**.
 3. 重启 Home Assistant。  
    Restart Home Assistant.
 
 ### 手动 / Manual
-1. 将 `custom_components/water_heater_optimizer` 复制到 Home Assistant 的 `custom_components` 目录。  
-   Copy the `custom_components/water_heater_optimizer` folder into your Home Assistant `custom_components` directory.
-2. 重启 Home Assistant。  
+1. 将 `custom_components/water_heater_optimizer` 复制到 Home Assistant 的 `custom_components` 目录（覆盖旧版）。  
+   Copy the `custom_components/water_heater_optimizer` folder into your Home Assistant `custom_components` directory (overwrite the old version).
+2. 从 0.3.0 升级时，删除旧目录残留的 `services.yaml`（0.4.0 已移除该文件与服务）。  
+   When upgrading from 0.3.0, delete the leftover `services.yaml` in the old folder (removed in 0.4.0).
+3. 重启 Home Assistant。  
    Restart Home Assistant.
 
 ---
@@ -34,36 +36,44 @@ Go to **Settings → Devices & Services → Add Integration**, search for **Wate
 
 ### 配置流程 / Setup Steps
 
+> **第 0 步 / Step 0**：先建一个进水温度的 **24h 移动平均** filter 辅助实体（建法见下方「进水均值辅助实体」一节），配置表单里的平均温度传感器要指向它。  
+> **Step 0**: first create a **24h moving-average** `filter` helper for the inlet temperature (see the "Inlet Average Helper" section below) — the average sensor field must point at it.
+
 | # | 字段 / Field | 说明 / Description |
 |---|-------------|-------------------|
 | 1 | **目标热水器 / Target Water Heater** | 选择你的 `water_heater` 实体。  
 Select your `water_heater` entity. |
-| 2 | **进水温度传感器 / Inlet Temperature Sensor** | 选择报告自来水温度的传感器。  
-Select the sensor reporting inlet (tap) water temperature. |
-| 3 | **快照触发条件 / Snapshot Trigger** | 选择如何捕获进水温度：实体状态变化、持续时间、或固定时间。  
-Choose how to capture the inlet temperature: entity state change, duration, or fixed time. |
-| 4 | **目标淋浴温度 / Target Shower Temperature** | 恒温花洒的设定温度（默认 37°C）。  
+| 2 | **24h 平均进水温度传感器 / 24h Average Inlet Temperature Sensor** | 指向第 0 步建好的 filter 均值实体（选择器只列温度类传感器）。  
+Point at the filter helper created in Step 0 (temperature sensors only). |
+| 3 | **目标淋浴温度 / Target Shower Temperature** | 恒温花洒的设定温度（默认 37°C）。  
 Your thermostatic mixer setpoint (default 37°C). |
-| 5 | **热水比例 / Hot Water Ratio** | 期望从热水器提供的水量比例（默认 0.70 = 70%）。  
+| 4 | **热水比例 / Hot Water Ratio** | 期望从热水器提供的水量比例（默认 0.70 = 70%）。  
 Desired proportion of water from the heater (default 0.70 = 70%). |
-| 6 | **推荐设定温度下限/上限 / Recommended Setpoint Minimum/Maximum** | 推荐热水器设定温度的允许窗口（默认 40°C ~ 50°C），与目标淋浴温度无关。  
+| 5 | **推荐设定温度下限/上限 / Recommended Setpoint Minimum/Maximum** | 推荐热水器设定温度的允许窗口（默认 40°C ~ 50°C），与目标淋浴温度无关。  
 Allowed window for the recommended heater setpoint (default 40°C ~ 50°C), independent of the shower target temperature. |
 
 ### 可增量配置 / Incremental Configuration
 
 你可以添加多个优化器实例——每个热水器或每个淋浴区一个，互不影响。  
-You can add multiple optimizer instances — one per water heater or per shower zone — each runs independently with its own sensors, triggers, and parameters.
+You can add multiple optimizer instances — one per water heater or per shower zone — each runs independently with its own average sensor and parameters.
 
 ---
 
 ## 工作原理 / How It Works
 
+进水温度取 **24 小时移动平均值**（外部 filter 辅助实体产出，集成不内置统计）。  
+The inlet temperature is a **24-hour moving average** from an external `filter` helper (no built-in statistics).
+
 ```
-Recommended Temp = Tap Temp + (Target Temp - Tap Temp) / Hot Water Ratio
+Recommended Temp = Avg Inlet Temp + (Target Temp - Avg Inlet Temp) / Hot Water Ratio
 ```
 
-结果会被限制在你设定的最低/最高温度之间。  
-The result is clamped between your configured min/max values.
+- 仅当平均温度的**整数值变化**时重算推荐值；  
+Recalculates only when the average's **integer value** changes;
+- 自动调节开启时，重算结果与热水器**当前设定比对**，不同才下发 `water_heater.set_temperature`，相同不动；  
+With auto-adjust on, the result is **compared against the heater's current setpoint** and only sent when different;
+- 结果夹在你设定的下限/上限之间，并按热水器自身 min/max 限值再次夹紧。  
+The result is clamped to your configured window and the heater's own min/max limits.
 
 ---
 
@@ -71,10 +81,8 @@ The result is clamped between your configured min/max values.
 
 | 实体 / Entity | 类型 / Type | 说明 / Description |
 |------------|-----------|-----------------|
-| `sensor.{name}_recommended_temperature` | Sensor | 计算出的热水器推荐出口温度。  
-Calculated optimal heater outlet temperature. |
-| `sensor.{name}_reference_tap_temperature` | Sensor | 上次快照的自来水温度。  
-Last captured inlet water temperature. |
+| `sensor.{name}_recommended_temperature` | Sensor | 计算出的热水器推荐出口温度；属性 `inlet_temp_sensor` = 均值源实体、`applied_temp` = 最近一次实际下发值。  
+Calculated optimal heater outlet temperature; attributes `inlet_temp_sensor` (average source) and `applied_temp` (last applied value). |
 | `switch.{name}_auto_adjust` | Switch | 是否自动将推荐温度下发到热水器。  
 Toggle automatic application of the recommended temperature. |
 | `number.{name}_target_temperature` | Number | 淋浴目标温度，可直接修改并立即生效（30~60°C，写入条目配置，重启保留）。  
@@ -84,53 +92,50 @@ Hot water ratio, directly adjustable with immediate effect (0.30~0.95, persisted
 
 ---
 
-## 服务 / Services
+## 进水均值辅助实体 / Inlet Average Helper
 
-### `water_heater_optimizer.take_snapshot`
+集成不内置统计——需要先建一个进水温度的 24h 移动平均实体，两种等价写法任选。  
+The integration has no built-in statistics — create a 24h moving-average entity first; two equivalent ways.
 
-手动触发指定实例的快照。  
-Manually trigger a snapshot for a specific instance.
+**UI**：设置 → 设备与服务 → 辅助 → 创建辅助条目 → 过滤器：源实体选进水温度传感器，过滤器选「时间简单移动平均」，窗口 `24:00:00`，精度 `0`。  
+**UI**: Settings → Devices & Services → Helpers → Create helper → Filter: source = inlet sensor, filter = Time simple moving average, window `24:00:00`, precision `0`.
+
+**YAML**（`configuration.yaml`，改完可在开发者工具热加载传感器实体）：  
+**YAML** (in `configuration.yaml`; sensor entities can be YAML-reloaded afterwards):
 
 ```yaml
-service: water_heater_optimizer.take_snapshot
-data:
-  entry_id: "YOUR_CONFIG_ENTRY_ID"
+sensor:
+  - platform: filter
+    name: "进水温度 24h 均值"
+    entity_id: sensor.inlet_temperature
+    filters:
+      - filter: time_simple_moving_average
+        window_size: "24:00"
+        precision: 0
 ```
 
----
-
-## 典型触发配置 / Typical Trigger Configurations
-
-### 传感器挂起/激活型（淋浴开始）
-- **触发类型 / Trigger Type:** Entity State Change
-- **触发实体 / Entity:** 进水温度传感器
-- **从状态 / From:** `unavailable`
-- **到状态 / To:** *(留空 / leave empty)*
-
-### 用水持续 N 秒后确认稳定
-- **触发类型 / Trigger Type:** Duration
-- **触发实体 / Entity:** 进水温度传感器
-- **持续时间 / Duration:** `120` 秒
-
-### 每日凌晨固定刷新
-- **触发类型 / Trigger Type:** Fixed Time
-- **时间 / Time:** `06:00`
+> filter 窗口为内存态：HA 重启后重新积累，头 24h 均值只基于部分数据；集成侧对引用值另有整数化兜底。  
+> The filter window is in-memory: it re-accumulates after a HA restart (first-24h average is partial); the integration additionally rounds the value itself.
 
 ---
 
 ## 故障排除 / Troubleshooting
 
+**Q: 推荐值一直是 unknown / 重启后没值？**  
+**A:** 检查 filter 均值实体是否有状态：unavailable/unknown 时集成会忽略本次变化（INFO 日志可见）；均值实体有值时，集成启动/重载即读一次并算出推荐值。  
+**A:** Check that the filter helper has a state: unavailable/unknown averages are ignored (INFO log line); once the average has a value, the integration reads it once on startup/reload and computes the recommendation.
+
 **Q: 改了目标温度/比例，推荐值没变？**  
-**A:** 推荐值基于"最近一次快照的进水温度"计算，修改参数会立即按该值重算；刚重启/重载条目后还没有任何快照时，参数已生效但推荐值要等下一次快照（或手动调用 `take_snapshot`）才刷新。  
-**A:** The recommendation is based on the last snapshot's inlet temperature and recalculates immediately on change; right after a restart/reload (no snapshot yet), the change takes effect but the displayed value refreshes on the next snapshot (or a manual `take_snapshot`).
+**A:** 参数热应用立即按最近一次有效均值重算；若从未有过有效均值，会记 INFO 并等均值就绪后生效。  
+**A:** Parameters hot-apply and recalculate from the last valid average immediately; if no valid average has been seen yet, an INFO line notes it and the value appears once the average is ready.
 
 **Q: 推荐温度看起来太低/太高。**  
 **A:** 调整**热水比例**。比例越低，推荐温度越高（越保守）；比例越高，推荐温度越低（越激进）。  
 Adjust the **Hot Water Ratio**. Lower ratio = higher recommended temperature (more conservative). Higher ratio = lower recommended temperature (more aggressive).
 
 **Q: 自动调节已开启，但热水器温度没有变化。**  
-**A:** 确保你的热水器实体支持 `water_heater.set_temperature`。部分云集成热水器需要切换到特定模式（如手动/恒温）才能接受外部温度指令。  
-Ensure your water heater entity supports `water_heater.set_temperature`. Some cloud-integrated heaters require a specific mode (e.g., manual/thermostat) to accept external commands.
+**A:** 推荐值与热水器当前设定相同（整数比对口径）时不会重复下发，属正常；若确实不同，确保热水器实体支持 `water_heater.set_temperature`（部分云集成热水器需切换到手动/恒温等特定模式），跳过原因均记 INFO 日志。  
+Identical (integer-compared) setpoints are not re-sent — that is normal; if they truly differ, make sure the entity supports `water_heater.set_temperature` (some cloud heaters need a specific mode), and check the INFO logs for skip reasons.
 
 **Q: 我想用同一个进水传感器控制两台热水器。**  
 **Q: Can I use the same inlet sensor for two heaters?**  
@@ -140,6 +145,18 @@ Yes. Add two optimizer instances, both pointing to the same inlet sensor but dif
 ---
 
 ## 更新日志 / Changelog
+
+### 0.4.0
+- 重构：水温数据源改为进水温度的 **24h 移动平均**（HA 原生 `filter` 辅助实体，集成只引用不内置统计）；升级后请在条目「配置」中把平均温度传感器指向新建的 filter 实体（交付文档见仓库 `debug/` 目录）  
+  Reworked: the inlet source is now a **24h moving average** from a stock `filter` helper; after upgrading, point the average sensor at your new helper via the entry's Configure dialog (delivery docs under the repo's `debug/` folder)
+- 移除：触发器体系（实体状态/持续时间/固定时间三种触发及六项配置）、`take_snapshot` 服务、Reference Tap Temperature 实体、迟滞与下发冷却；旧条目无需迁移，残留 trigger 配置键被忽略  
+  Removed: the trigger system (entity/duration/fixed-time and its six options), the `take_snapshot` service, the Reference Tap Temperature entity, and hysteresis/cooldown; existing entries migrate as-is, leftover trigger keys are ignored
+- 新语义：仅当平均值**整数值变化**时重算；重算后与热水器当前设定**比对下发**，相同不动  
+  New semantics: recalculate only on **integer changes** of the average; **compare-then-apply** against the heater's current setpoint — identical values are left alone
+- 健壮性：全部跳过路径（均值不可用、热水器缺席/设定不可读）INFO 级落因，杜绝静默停摆；热水器自身 min/max 限值夹紧保留  
+  Robustness: every skip path (average unavailable, heater missing/unreadable setpoint) logs at INFO — no more silent stalls; device-side min/max clamping retained
+- 新增：FumihaHub 壳只读信息页（推荐温度/参数/总闸状态；需 FumihaHub 在场，无壳不报错仅记日志）  
+  Added: read-only FumihaHub panel page (recommendation, parameters, auto-adjust state; requires FumihaHub, logs and does nothing without it)
 
 ### 0.3.0
 > 已知待办（经审查评估延后）：forced 下发的服务调用在飞期间若进水传感器恰好上报，可能多发一条同值的 `set_temperature`（毫秒级窗口，存量类，概率 ~10⁻⁴~10⁻³/次改参，无振荡无风暴；2026-10-02 第三轮审查确认）  
