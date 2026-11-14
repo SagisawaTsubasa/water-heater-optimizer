@@ -1,5 +1,7 @@
 """Sensor platform for Water Heater Optimizer."""
 
+import logging
+
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
@@ -8,12 +10,15 @@ from homeassistant.components.sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 
 from .const import CONF_INLET_TEMP_SENSOR, DOMAIN, SIGNAL_UPDATE
+
+_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
@@ -23,7 +28,24 @@ async def async_setup_entry(
 ) -> None:
     """Set up sensors."""
     optimizer = hass.data[DOMAIN][entry.entry_id]
+    _remove_stale_reference_tap_entity(hass, entry)
     async_add_entities([RecommendedTempSensor(optimizer, entry)])
+
+
+def _remove_stale_reference_tap_entity(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """清掉 v0.3.0 砍除的 ReferenceTapTempSensor 注册表残留（R1 P3#8）。
+
+    平台不再提供该实体后 HA 不会自动清注册表，升级用户会留一个永久
+    unavailable 的幽灵实体（WHA-F-332 同型）。幂等：清完后
+    async_get_entity_id 返回 None，后续 setup 空跑。
+    """
+    registry = er.async_get(hass)
+    stale = registry.async_get_entity_id(
+        "sensor", DOMAIN, f"{entry.entry_id}_reference_tap_temp"
+    )
+    if stale is not None:
+        registry.async_remove(stale)
+        _LOGGER.info("已清理旧版 Reference Tap 实体注册表条目 %s", stale)
 
 
 def _device_info(entry: ConfigEntry) -> DeviceInfo:

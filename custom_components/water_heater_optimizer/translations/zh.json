@@ -38,7 +38,8 @@
       }
     },
     "error": {
-      "invalid_range": "最低温度（{min_temp}）必须低于最高温度（{max_temp}）。"
+      "invalid_range": "最低温度（{min_temp}）必须低于最高温度（{max_temp}）。",
+      "already_configured": "该热水器已配置"
     }
   }
 }

@@ -4,7 +4,7 @@ import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.typing import ConfigType
 
 from . import web as web_mod
@@ -29,6 +29,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up a config entry."""
     optimizer = WaterHeaterOptimizer(hass, entry)
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = optimizer
+
+    @callback
+    def _cleanup() -> None:
+        # R1 P2#3：setup 失败与正常卸载共用回滚。HA 在 setup 抛错时会执行
+        # on_unload 链（config_entries 的 async_setup finally 分支），挂上后
+        # web setup / 平台转发失败不再泄漏 hass.data 条目与 avg listener。
+        # 幂等：正常卸载（unload platforms 成功后 on_unload 链）二次调用空跑
+        optimizer.stop()
+        hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
+        if not hass.data.get(DOMAIN):
+            web_mod.async_unload_web(hass)
+
+    entry.async_on_unload(_cleanup)
+
     await optimizer.async_setup()
 
     await web_mod.async_setup_web(hass)
@@ -70,12 +84,10 @@ async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> Non
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Unload a config entry."""
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    if unload_ok:
-        optimizer = hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
-        if optimizer is not None:
-            await optimizer.async_unload()
-        if not hass.data.get(DOMAIN):
-            web_mod.async_unload_web(hass)
-    return unload_ok
+    """Unload a config entry.
+
+    条目清理（stop/pop hass.data/web unload）统一走 async_setup_entry 里
+    注册的 on_unload 回调：unload platforms 成功后 HA 自动执行 on_unload
+    链；失败时保留现场（与旧行为一致）。
+    """
+    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)

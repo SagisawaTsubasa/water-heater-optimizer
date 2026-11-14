@@ -1,0 +1,45 @@
+{
+  "title": "Water Heater Optimizer",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Water Heater Optimizer",
+        "description": "Configure temperature optimization. Point the average sensor at a 24h moving-average helper (filter) of the inlet temperature.",
+        "data": {
+          "water_heater": "Target Water Heater",
+          "inlet_temp_sensor": "24h Average Inlet Temperature Sensor",
+          "target_temp": "Target Shower Temperature",
+          "hot_water_ratio": "Hot Water Ratio",
+          "min_temp": "Recommended Setpoint Minimum",
+          "max_temp": "Recommended Setpoint Maximum"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "This water heater is already configured"
+    },
+    "error": {
+      "invalid_range": "Minimum temperature ({min_temp}) must be lower than maximum temperature ({max_temp})."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Water Heater Optimizer",
+        "description": "Re-configure basic parameters for temperature optimization.",
+        "data": {
+          "water_heater": "Target Water Heater",
+          "inlet_temp_sensor": "24h Average Inlet Temperature Sensor",
+          "target_temp": "Target Shower Temperature",
+          "hot_water_ratio": "Hot Water Ratio",
+          "min_temp": "Recommended Setpoint Minimum",
+          "max_temp": "Recommended Setpoint Maximum"
+        }
+      }
+    },
+    "error": {
+      "invalid_range": "Minimum temperature ({min_temp}) must be lower than maximum temperature ({max_temp}).",
+      "already_configured": "This water heater is already configured"
+    }
+  }
+}

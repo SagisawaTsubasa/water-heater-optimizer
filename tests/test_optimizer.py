@@ -178,9 +178,14 @@ class FakeStates:
 class FakeServices:
     def __init__(self):
         self.calls = []
+        self.fail = False
 
     async def async_call(self, domain, service, data, blocking=False):
         self.calls.append((domain, service, data))
+        if self.fail:
+            from homeassistant.exceptions import HomeAssistantError
+
+            raise HomeAssistantError("boom")
 
 
 class FakeHass:
@@ -190,6 +195,7 @@ class FakeHass:
         self.signals = []
         self.tracked = []
         self.tasks = []
+        self.data = {}
 
     def async_create_task(self, coro):
         task = asyncio.get_running_loop().create_task(coro)
@@ -197,16 +203,20 @@ class FakeHass:
         return task
 
 
+def make_optimizer_entry_data():
+    return {
+        "water_heater": "water_heater.test",
+        "inlet_temp_sensor": "sensor.avg_inlet",
+        "target_temp": 37,
+        "hot_water_ratio": 0.7,
+        "min_temp": 40,
+        "max_temp": 50,
+    }
+
+
 def make_optimizer(states=None):
     entry = types.SimpleNamespace(
-        data={
-            "water_heater": "water_heater.test",
-            "inlet_temp_sensor": "sensor.avg_inlet",
-            "target_temp": 37,
-            "hot_water_ratio": 0.7,
-            "min_temp": 40,
-            "max_temp": 50,
-        },
+        data=make_optimizer_entry_data(),
         options={},
         title="Optimizer test",
         entry_id="test_entry",
@@ -226,8 +236,9 @@ def fire_avg(hass, value):
 
 
 async def drain(hass):
-    """等所有 spawn 的下发任务跑完。"""
-    await asyncio.gather(*hass.tasks)
+    """等所有 spawn 的下发任务跑完（含被单飞取消的任务）。"""
+    if hass.tasks:
+        await asyncio.gather(*hass.tasks, return_exceptions=True)
 
 
 # --- calculate 纯函数 ---
@@ -454,7 +465,234 @@ def test_unload_clears_listeners():
         _hass, opt = make_optimizer()
         await opt.async_setup()
         assert len(opt._listeners) == 1
-        await opt.async_unload()
+        opt.stop()
         assert opt._listeners == []
+        opt.stop()  # 幂等：二次调用空跑（R1 P2#3）
+
+    asyncio.run(scenario())
+
+
+# --- R1 修复轮新增：启动读取/热应用/单飞/总闸/回滚/有限性 ---
+
+
+def test_setup_reads_current_avg():
+    async def scenario():
+        # R1 P2#2：启动即读当前 avg——重启后不等首个 state_changed
+        hass, opt = make_optimizer(
+            states={"sensor.avg_inlet": FakeState("20")}
+        )
+        await opt.async_setup()
+        assert opt.last_avg_temp == 20
+        assert opt.recommended_temp == 44
+        assert hass.signals  # 实体已刷
+        # 总闸未开（switch 平台尚未恢复），不下发
+        await drain(hass)
+        assert hass.services.calls == []
+
+    asyncio.run(scenario())
+
+
+def test_setup_avg_unavailable_logs_info(caplog):
+    async def scenario():
+        # R1 P2#2：启动时 avg 不可用也不得静默（血泪教训面）
+        _hass, opt = make_optimizer(
+            states={"sensor.avg_inlet": FakeState("unavailable")}
+        )
+        with caplog.at_level("INFO"):
+            await opt.async_setup()
+        assert opt.last_avg_temp is None
+        assert opt.recommended_temp is None
+        assert "忽略" in caplog.text
+
+    asyncio.run(scenario())
+
+
+def test_apply_live_config_recalculates_and_dispatches():
+    async def scenario():
+        # R1 P3#7：参数热更新 → 用最近 avg 重算 → 比对下发
+        heater = FakeState(
+            "heat_pump", {"temperature": 42, "min_temp": 35, "max_temp": 75}
+        )
+        hass, opt = make_optimizer(states={"water_heater.test": heater})
+        await opt.async_setup()
+        fire_avg(hass, "20")
+        await drain(hass)
+        opt.auto_adjust = True
+        # target 37→39：20 + (39-20)/0.7 = 47.14 → 47
+        opt.entry.options = {**opt.entry.options, "target_temp": 39}
+        opt.apply_live_config()
+        await drain(hass)
+        assert opt.recommended_temp == 47
+        assert len(hass.services.calls) == 1
+        assert hass.services.calls[0][2]["temperature"] == 47
+
+    asyncio.run(scenario())
+
+
+def test_apply_live_config_without_avg_logs_info(caplog):
+    async def scenario():
+        # R1 P2#2/P3#7：无均值时热应用不得静默跳过
+        hass, opt = make_optimizer()
+        await opt.async_setup()
+        with caplog.at_level("INFO"):
+            opt.apply_live_config()
+        await drain(hass)
+        assert opt.recommended_temp is None
+        assert "尚无有效" in caplog.text
+        assert hass.services.calls == []
+
+    asyncio.run(scenario())
+
+
+def test_consecutive_applies_single_flight():
+    async def scenario():
+        # R1 P2#5：连续两次热应用（slider 拖动态势）——第一个任务被第二个
+        # 取代，只发最后一个值
+        heater = FakeState(
+            "heat_pump", {"temperature": 42, "min_temp": 35, "max_temp": 75}
+        )
+        hass, opt = make_optimizer(states={"water_heater.test": heater})
+        await opt.async_setup()
+        fire_avg(hass, "20")
+        await drain(hass)
+        opt.auto_adjust = True
+        opt.entry.options = {**opt.entry.options, "target_temp": 39}
+        opt.apply_live_config()  # 推荐 47，任务排队未跑
+        opt.entry.options = {**opt.entry.options, "target_temp": 40}
+        opt.apply_live_config()  # 推荐 49，取代上一个
+        await drain(hass)
+        assert len(hass.services.calls) == 1
+        assert hass.services.calls[0][2]["temperature"] == 49
+
+    asyncio.run(scenario())
+
+
+def test_queued_apply_aborts_when_switch_off(caplog):
+    async def scenario():
+        # R1 P2#5：总闸关闭后排队任务不得继续下发（发送前复检）
+        heater = FakeState(
+            "heat_pump", {"temperature": 42, "min_temp": 35, "max_temp": 75}
+        )
+        hass, opt = make_optimizer(states={"water_heater.test": heater})
+        await opt.async_setup()
+        fire_avg(hass, "20")
+        opt.auto_adjust = True
+        opt.entry.options = {**opt.entry.options, "target_temp": 39}
+        opt.apply_live_config()  # 任务排队
+        await opt.async_set_auto_adjust(False)  # 总闸关闭
+        with caplog.at_level("INFO"):
+            await drain(hass)
+        assert hass.services.calls == []
+        assert "自动调节已关" in caplog.text
+
+    asyncio.run(scenario())
+
+
+def test_switch_on_without_recommendation_logs_info(caplog):
+    async def scenario():
+        # R1 P2#2：总闸开但无推荐值时不得静默跳过
+        hass, opt = make_optimizer()
+        await opt.async_setup()
+        with caplog.at_level("INFO"):
+            await opt.async_set_auto_adjust(True)
+        assert "暂不下发" in caplog.text
+        assert hass.services.calls == []
+
+    asyncio.run(scenario())
+
+
+def test_apply_service_error_logged_not_applied(caplog):
+    async def scenario():
+        # R1 P3#7：服务调用失败 → error 落日志、applied_temp 不更新
+        heater = FakeState(
+            "heat_pump", {"temperature": 42, "min_temp": 35, "max_temp": 75}
+        )
+        hass, opt = make_optimizer(states={"water_heater.test": heater})
+        hass.services.fail = True
+        await opt.async_setup()
+        opt.auto_adjust = True
+        with caplog.at_level("ERROR"):
+            fire_avg(hass, "20")
+            await drain(hass)
+        assert len(hass.services.calls) == 1  # 尝试过调用
+        assert opt.applied_temp is None
+        assert "下发设定温度" in caplog.text
+
+    asyncio.run(scenario())
+
+
+def test_calculate_nonfinite_rejected():
+    _, opt = make_optimizer()
+    # R1 P3#10：NaN/inf 配置一律拒绝，不再混过守卫抛到回调里
+    for key in ("target_temp", "hot_water_ratio", "min_temp", "max_temp"):
+        backup = opt.config[key]
+        opt.config[key] = float("nan")
+        assert opt.calculate(20) is None
+        opt.config[key] = float("inf")
+        assert opt.calculate(20) is None
+        opt.config[key] = backup
+
+
+def test_apply_skips_nonfinite_current():
+    async def scenario():
+        # R1 P3#10：设备当前设定为 NaN 时跳过不炸（round(nan) 抛 ValueError）
+        heater = FakeState(
+            "heat_pump",
+            {"temperature": float("nan"), "min_temp": 35, "max_temp": 75},
+        )
+        hass, opt = make_optimizer(states={"water_heater.test": heater})
+        await opt.async_setup()
+        opt.auto_adjust = True
+        fire_avg(hass, "20")
+        await drain(hass)
+        assert hass.services.calls == []
+
+    asyncio.run(scenario())
+
+
+def test_setup_entry_rollback_on_web_error(monkeypatch):
+    async def scenario():
+        # R1 P2#3：web setup 抛错后 on_unload 链回滚——hass.data 与 listener 清
+        import water_heater_optimizer as wha
+        from water_heater_optimizer import web as web_mod
+
+        async def _boom(hass):
+            raise RuntimeError("web boom")
+
+        monkeypatch.setattr(web_mod, "async_setup_web", _boom)
+
+        on_unload = []
+        entry = types.SimpleNamespace(
+            data=dict(make_optimizer_entry_data()),
+            options={},
+            title="Optimizer test",
+            entry_id="test_entry",
+            async_on_unload=on_unload.append,
+            add_update_listener=lambda fn: (lambda: None),
+        )
+        hass = FakeHass()
+
+        async def _fail_forward(hass_, entry_, platforms):
+            raise AssertionError("web 抛错后不应到达平台转发")
+
+        hass.config_entries = types.SimpleNamespace(
+            async_forward_entry_setups=_fail_forward
+        )
+
+        try:
+            await wha.async_setup_entry(hass, entry)
+        except RuntimeError:
+            pass
+
+        # 抛错现场：optimizer 与 listener 仍在（HA 尚未跑 on_unload 链）
+        opt = hass.data["water_heater_optimizer"]["test_entry"]
+        assert len(opt._listeners) == 1
+        # 模拟 HA 的 setup 失败处理：执行 on_unload 链（_cleanup 在其中）
+        for fn in on_unload:
+            fn()
+        assert opt._listeners == []
+        assert "test_entry" not in hass.data.get("water_heater_optimizer", {})
+        # 末条 web unload 不炸（flags 未建，早退路径）
+        assert "water_heater_optimizer_web_registered" not in hass.data
 
     asyncio.run(scenario())

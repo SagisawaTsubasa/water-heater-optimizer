@@ -38,7 +38,8 @@
       }
     },
     "error": {
-      "invalid_range": "Minimum temperature ({min_temp}) must be lower than maximum temperature ({max_temp})."
+      "invalid_range": "Minimum temperature ({min_temp}) must be lower than maximum temperature ({max_temp}).",
+      "already_configured": "This water heater is already configured"
     }
   }
 }

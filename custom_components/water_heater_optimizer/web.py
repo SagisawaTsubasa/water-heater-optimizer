@@ -135,10 +135,26 @@ def _teardown_page(hass: HomeAssistant) -> None:
 def _make_started_recheck(hass: HomeAssistant, flags: dict):
     @callback
     def _recheck(event: Event) -> None:
+        # R1 P3#6（WHA-F-334 同型）：一次性监听触发后 HA 已自动移除，
+        # 置 None 防 unload 时再 unsub 报 "Unable to remove unknown job listener"
+        flags["started_recheck"] = None
         _LOGGER.debug("HA started: re-checking hub page registration")
         _register_page(hass, flags)
 
     return _recheck
+
+
+def _make_page_watch(hass: HomeAssistant, flags: dict):
+    @callback
+    def _watch(event: Event) -> None:
+        # R1 P3#9：壳条目删后重加会销毁重建 registry dict（fumiha_hub 的
+        # async_remove_entry 删键、再 setup 建新 dict），我们注册的页会丢且
+        # 契约无 registry-ready 事件；借任何消费者的注册/注销活动重查补注册。
+        # shortcut: 壳重建后若无任何消费者活动，仍需本集成 reload 才恢复
+        # （fumiha_hub registry 契约明示 consumers re-register on next reload）
+        _register_page(hass, flags)
+
+    return _watch
 
 
 async def async_setup_web(hass: HomeAssistant) -> None:
@@ -158,10 +174,18 @@ async def async_setup_web(hass: HomeAssistant) -> None:
 
     _register_page(hass, flags)
 
-    if not flags.get("started_recheck"):
-        # 壳条目可能晚于本集成加载；started 时全量就位，重查一次
+    if not flags.get("started_recheck") and not hass.is_running:
+        # 壳条目可能晚于本集成加载；started 时全量就位，重查一次。
+        # HA 已运行（条目 reload 重进此处）时不再挂一次性监听——started
+        # 不会再触发，挂着只是死监听
         flags["started_recheck"] = hass.bus.async_listen_once(
             EVENT_HOMEASSISTANT_STARTED, _make_started_recheck(hass, flags)
+        )
+
+    if not flags.get("page_watch"):
+        # R1 P3#9：常驻重查监听——壳删后重加重建 registry 时借消费者活动补注册
+        flags["page_watch"] = hass.bus.async_listen(
+            HUB_BUS_EVENT_PAGE_CHANGED, _make_page_watch(hass, flags)
         )
 
 
@@ -175,8 +199,13 @@ def async_unload_web(hass: HomeAssistant) -> None:
     flags: dict = hass.data.get(WEB_DATA_KEY) or {}
     if not flags:
         return
+    if (unsub := flags.pop("page_watch", None)) is not None:
+        # 先摘重查监听，防 teardown 的 page_changed 广播被自己接住而重注册
+        unsub()
     if flags.get("page_registered"):
         _teardown_page(hass)
         flags["page_registered"] = False
     if (unsub := flags.pop("started_recheck", None)) is not None:
+        # 已触发的一次性监听已被 HA 移除且 flags 里已置 None，这里只处理
+        # "注册了但从未触发"的残留
         unsub()
