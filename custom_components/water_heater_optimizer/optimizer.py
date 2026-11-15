@@ -84,6 +84,10 @@ class WaterHeaterOptimizer:
             _LOGGER.warning("热水比例必须大于 0（当前 %s），跳过计算", ratio)
             return None
         if min_temp > max_temp:
+            _LOGGER.warning(
+                "窗口上下限倒置（min=%.1f > max=%.1f），按交换后窗口计算",
+                min_temp, max_temp,
+            )
             min_temp, max_temp = max_temp, min_temp
 
         rec = tap_temp + (target - tap_temp) / ratio

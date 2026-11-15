@@ -11,6 +11,8 @@ import sys
 import types
 from pathlib import Path
 
+import pytest
+
 
 def _install_ha_stubs() -> None:
     """注入 optimizer/__init__ import 面所需的最小 HA 模块桩。"""
@@ -818,3 +820,47 @@ def test_structural_key_change_still_reloads():
         assert hass.config_entries.reloads == [opt.entry.entry_id]
 
     asyncio.run(scenario())
+
+
+# --- FX-UX-126 R1-fix：P2#1 窗口交叉校验 + 交换分支可见性 ---
+
+
+def test_min_max_number_cross_constraint_rejects_inverted_window():
+    async def scenario():
+        # R1 P2#1：number 写入前做 min<max 交叉校验，与表单 invalid_range
+        # 语义对齐（等值也拒）；拦截时不落 options、不触发 set_live_config
+        from homeassistant.exceptions import HomeAssistantError
+
+        hass, opt = make_optimizer()
+        hass.config_entries = FakeConfigEntries()
+        mn = number_mod.MinTempNumber(opt, opt.entry)
+        mx = number_mod.MaxTempNumber(opt, opt.entry)
+
+        with pytest.raises(HomeAssistantError):
+            await mn.async_set_native_value(60)  # 60 >= 当前 max 50 → 拒
+        assert "min_temp" not in opt.entry.options
+        assert hass.config_entries.updates == []
+
+        with pytest.raises(HomeAssistantError):
+            await mx.async_set_native_value(30)  # 30 <= 当前 min 40 → 拒
+        assert "max_temp" not in opt.entry.options
+
+        with pytest.raises(HomeAssistantError):
+            await mn.async_set_native_value(50)  # 50 == 当前 max 50 → 等值拒
+
+        await mn.async_set_native_value(45)  # 45 < 50 → 合法放行
+        assert opt.entry.options["min_temp"] == 45
+        with pytest.raises(HomeAssistantError):
+            await mx.async_set_native_value(45)  # 45 <= 当前 min 45 → 等值拒
+
+    asyncio.run(scenario())
+
+
+def test_calculate_swapped_window_logs_warning(caplog):
+    # R1 P2#1②：手工改 storage 造成窗口倒置时，交换分支不再无声
+    _, opt = make_optimizer()
+    opt.config["min_temp"] = 60
+    opt.config["max_temp"] = 50
+    with caplog.at_level("WARNING"):
+        assert opt.calculate(20) == 50  # 交换后 [50,60]：44.29 → 夹到下限 50
+    assert "倒置" in caplog.text
