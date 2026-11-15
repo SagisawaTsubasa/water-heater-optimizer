@@ -271,7 +271,7 @@ class WaterHeaterOptimizer:
         )
 
     def apply_live_config(self):
-        """热应用可调参数（target_temp / hot_water_ratio），不重载条目。
+        """热应用可调参数（target_temp / hot_water_ratio / min_temp / max_temp），不重载条目。
 
         用最近一次有效 avg 值重算推荐值；自动调节开启时立即比对下发。
         并发治理：下发任务单飞（_spawn_apply），旧任务未完成即被新任务
@@ -284,9 +284,11 @@ class WaterHeaterOptimizer:
         if self.last_avg_temp is not None:
             self.recommended_temp = self.calculate(self.last_avg_temp)
             _LOGGER.info(
-                "参数已热更新: target=%s°C, ratio=%s → recommended=%s°C",
+                "参数已热更新: target=%s°C, ratio=%s, window=[%s, %s]°C → recommended=%s°C",
                 self.config.get(CONF_TARGET_TEMP),
                 self.config.get(CONF_HOT_WATER_RATIO),
+                self.config.get(CONF_MIN_TEMP),
+                self.config.get(CONF_MAX_TEMP),
                 self.recommended_temp,
             )
         else:

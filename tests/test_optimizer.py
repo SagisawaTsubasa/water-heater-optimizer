@@ -133,6 +133,61 @@ def _install_ha_stubs() -> None:
     ha_loader = types.ModuleType("homeassistant.loader")
     ha_loader.async_get_loaded_integration = lambda hass, domain: None
 
+    # number.py 的 import 面（FX-UX-126 步7 参数原生化）
+    ha_number = types.ModuleType("homeassistant.components.number")
+
+    class _NumberEntity:
+        _attr_unique_id: str | None = None
+        _attr_native_min_value: float | None = None
+        _attr_native_max_value: float | None = None
+        _attr_native_step: float | None = None
+        _attr_mode = None
+
+        @property
+        def unique_id(self):
+            return self._attr_unique_id
+
+        @property
+        def native_min_value(self):
+            return self._attr_native_min_value
+
+        @property
+        def native_max_value(self):
+            return self._attr_native_max_value
+
+        @property
+        def native_step(self):
+            return self._attr_native_step
+
+        @property
+        def mode(self):
+            return self._attr_mode
+
+        def async_write_ha_state(self):
+            pass  # 桩：生产路径为同步刷状态，测试只需不炸
+
+    class _NumberMode:
+        AUTO = "auto"
+        BOX = "box"
+        SLIDER = "slider"
+
+    ha_number.NumberEntity = _NumberEntity
+    ha_number.NumberMode = _NumberMode
+
+    ha_entity = types.ModuleType("homeassistant.helpers.entity")
+
+    class _DeviceInfo:
+        def __init__(self, **kwargs):
+            self.kwargs = dict(kwargs)
+
+    ha_entity.DeviceInfo = _DeviceInfo
+
+    ha_platform = types.ModuleType("homeassistant.helpers.entity_platform")
+    ha_platform.AddEntitiesCallback = object
+
+    ha_helpers.entity = ha_entity
+    ha_helpers.entity_platform = ha_platform
+
     for name, mod in {
         "homeassistant": ha,
         "homeassistant.const": ha_const,
@@ -147,6 +202,9 @@ def _install_ha_stubs() -> None:
         "aiohttp.web": aiohttp_web,
         "homeassistant.components": ha_components,
         "homeassistant.components.http": ha_http,
+        "homeassistant.components.number": ha_number,
+        "homeassistant.helpers.entity": ha_entity,
+        "homeassistant.helpers.entity_platform": ha_platform,
         "homeassistant.loader": ha_loader,
     }.items():
         sys.modules[name] = mod
@@ -158,6 +216,7 @@ sys.path.insert(
 )
 
 optimizer_mod = importlib.import_module("water_heater_optimizer.optimizer")
+number_mod = importlib.import_module("water_heater_optimizer.number")
 WaterHeaterOptimizer = optimizer_mod.WaterHeaterOptimizer
 
 
@@ -201,6 +260,23 @@ class FakeHass:
         task = asyncio.get_running_loop().create_task(coro)
         self.tasks.append(task)
         return task
+
+
+class FakeConfigEntries:
+    """async_update_entry/async_schedule_reload 最小桩（number 写入路径用）。"""
+
+    def __init__(self):
+        self.updates = []
+        self.reloads = []
+
+    def async_update_entry(self, entry, **kwargs):
+        if "options" in kwargs:
+            entry.options = dict(kwargs["options"])
+        self.updates.append((entry.entry_id, sorted(kwargs)))
+        return True
+
+    def async_schedule_reload(self, entry_id):
+        self.reloads.append(entry_id)
 
 
 def make_optimizer_entry_data():
@@ -694,5 +770,105 @@ def test_setup_entry_rollback_on_web_error(monkeypatch):
         assert "test_entry" not in hass.data.get("water_heater_optimizer", {})
         # 末条 web unload 不炸（flags 未建，早退路径）
         assert "water_heater_optimizer_web_registered" not in hass.data
+
+    asyncio.run(scenario())
+
+
+# --- FX-UX-126 步7：min/max 参数原生化 ---
+
+
+def _register_optimizer(hass, opt):
+    """按 async_setup_entry 的真实形态把 optimizer 挂进 hass.data（listener 依赖）。"""
+    hass.data.setdefault("water_heater_optimizer", {})[opt.entry.entry_id] = opt
+
+
+def test_min_max_number_entity_ranges():
+    _hass, opt = make_optimizer()
+    mn = number_mod.MinTempNumber(opt, opt.entry)
+    mx = number_mod.MaxTempNumber(opt, opt.entry)
+    # 值域与 config_flow 选择器一致（min 30-60 / max 30-70，step 1，BOX）
+    assert (mn.native_min_value, mn.native_max_value, mn.native_step) == (
+        30.0, 60.0, 1.0,
+    )
+    assert (mx.native_min_value, mx.native_max_value, mx.native_step) == (
+        30.0, 70.0, 1.0,
+    )
+    assert mn.mode == number_mod.NumberMode.BOX
+    assert mx.mode == number_mod.NumberMode.BOX
+    # unique_id 命名照既有族（entry_id_后缀）
+    assert mn.unique_id == "test_entry_min_temp"
+    assert mx.unique_id == "test_entry_max_temp"
+    # native_value 读 config（options 优先，data 兜底）
+    assert mn.native_value == 40
+    assert mx.native_value == 50
+
+
+def test_min_max_number_set_value_snaps_clamps_persists():
+    async def scenario():
+        hass, opt = make_optimizer()
+        hass.config_entries = FakeConfigEntries()
+        mn = number_mod.MinTempNumber(opt, opt.entry)
+        mx = number_mod.MaxTempNumber(opt, opt.entry)
+        await mn.async_set_native_value(25)  # 低于下限 → 吸附夹到 30
+        assert opt.entry.options["min_temp"] == 30
+        await mn.async_set_native_value(45)  # 窗口内原样落盘
+        assert opt.entry.options["min_temp"] == 45
+        await mx.async_set_native_value(75)  # 高于上限 → 吸附夹到 70
+        assert opt.entry.options["max_temp"] == 70
+        # 三次写入都走 set_live_config → async_update_entry（entry.options 持久化路径）
+        assert len(hass.config_entries.updates) == 3
+        assert hass.config_entries.reloads == []
+
+    asyncio.run(scenario())
+
+
+def test_min_max_live_keys_hot_apply_without_reload():
+    async def scenario():
+        # FX-UX-126 步7：min/max 加入 _LIVE_KEYS——仅这两键变化走热应用
+        # （重算消费 calculate 的窗口夹紧），不触发整条目重载
+        import water_heater_optimizer as wha
+
+        heater = FakeState(
+            "heat_pump", {"temperature": 42, "min_temp": 35, "max_temp": 75}
+        )
+        hass, opt = make_optimizer(states={"water_heater.test": heater})
+        await opt.async_setup()
+        fire_avg(hass, "20")  # 推荐 44（窗口 40-50）
+        _register_optimizer(hass, opt)
+        hass.config_entries = FakeConfigEntries()
+
+        mn = number_mod.MinTempNumber(opt, opt.entry)
+        await mn.async_set_native_value(45)  # options: min_temp 40→45
+        await wha._async_update_listener(hass, opt.entry)  # 模拟 HA update listener
+        assert hass.config_entries.reloads == []  # 未重载
+        assert opt.recommended_temp == 45  # 44 被新窗口下限夹到 45
+
+        fire_avg(hass, "5")  # 均值变化重算：5+32/0.7=50.7→51，夹到窗口 [45,50] → 50
+        assert opt.recommended_temp == 50
+
+        mx = number_mod.MaxTempNumber(opt, opt.entry)
+        await mx.async_set_native_value(48)  # options: max_temp 50→48
+        await wha._async_update_listener(hass, opt.entry)
+        assert hass.config_entries.reloads == []
+        assert opt.recommended_temp == 48  # 51 被新窗口上限夹到 48
+
+    asyncio.run(scenario())
+
+
+def test_structural_key_change_still_reloads():
+    async def scenario():
+        # 结构性键（water_heater）变化不因 _LIVE_KEYS 扩容而漏判——仍走重载
+        import water_heater_optimizer as wha
+
+        hass, opt = make_optimizer()
+        await opt.async_setup()
+        _register_optimizer(hass, opt)
+        hass.config_entries = FakeConfigEntries()
+        opt.entry.options = {
+            **opt.entry.options,
+            "water_heater": "water_heater.other",
+        }
+        await wha._async_update_listener(hass, opt.entry)
+        assert hass.config_entries.reloads == [opt.entry.entry_id]
 
     asyncio.run(scenario())

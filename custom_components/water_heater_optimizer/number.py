@@ -9,7 +9,11 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
     CONF_HOT_WATER_RATIO,
+    CONF_MAX_TEMP,
+    CONF_MIN_TEMP,
     CONF_TARGET_TEMP,
+    DEFAULT_MAX_TEMP,
+    DEFAULT_MIN_TEMP,
     DEFAULT_RATIO,
     DEFAULT_TARGET_TEMP,
     DOMAIN,
@@ -24,7 +28,12 @@ async def async_setup_entry(
 ) -> None:
     """Set up numbers."""
     optimizer = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([TargetTempNumber(optimizer, entry), HotWaterRatioNumber(optimizer, entry)])
+    async_add_entities([
+        TargetTempNumber(optimizer, entry),
+        HotWaterRatioNumber(optimizer, entry),
+        MinTempNumber(optimizer, entry),
+        MaxTempNumber(optimizer, entry),
+    ])
 
 
 class _OptimizerNumber(NumberEntity):
@@ -108,3 +117,35 @@ class HotWaterRatioNumber(_OptimizerNumber):
     _attr_native_max_value = 0.95
     _attr_native_step = 0.05
     _attr_mode = NumberMode.SLIDER
+
+
+class MinTempNumber(_OptimizerNumber):
+    """Recommended setpoint minimum (live-tunable)."""
+
+    CONFIG_KEY = CONF_MIN_TEMP
+    DEFAULT = DEFAULT_MIN_TEMP
+    TITLE_SUFFIX = "Recommended Minimum"
+    UNIQUE_SUFFIX = "min_temp"
+
+    _attr_icon = "mdi:thermometer-low"
+    _attr_native_min_value = 30.0
+    _attr_native_max_value = 60.0
+    _attr_native_step = 1.0
+    _attr_native_unit_of_measurement = "°C"
+    _attr_mode = NumberMode.BOX
+
+
+class MaxTempNumber(_OptimizerNumber):
+    """Recommended setpoint maximum (live-tunable)."""
+
+    CONFIG_KEY = CONF_MAX_TEMP
+    DEFAULT = DEFAULT_MAX_TEMP
+    TITLE_SUFFIX = "Recommended Maximum"
+    UNIQUE_SUFFIX = "max_temp"
+
+    _attr_icon = "mdi:thermometer-high"
+    _attr_native_min_value = 30.0
+    _attr_native_max_value = 70.0
+    _attr_native_step = 1.0
+    _attr_native_unit_of_measurement = "°C"
+    _attr_mode = NumberMode.BOX

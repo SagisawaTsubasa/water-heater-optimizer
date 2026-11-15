@@ -8,7 +8,13 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.typing import ConfigType
 
 from . import web as web_mod
-from .const import CONF_HOT_WATER_RATIO, CONF_TARGET_TEMP, DOMAIN
+from .const import (
+    CONF_HOT_WATER_RATIO,
+    CONF_MAX_TEMP,
+    CONF_MIN_TEMP,
+    CONF_TARGET_TEMP,
+    DOMAIN,
+)
 from .optimizer import WaterHeaterOptimizer
 
 _LOGGER = logging.getLogger(__name__)
@@ -16,7 +22,12 @@ _LOGGER = logging.getLogger(__name__)
 PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.SWITCH, Platform.NUMBER]
 
 # 可由 number 实体运行时直接改的键：仅这些键变化时不重载条目，走热应用
-_LIVE_KEYS = frozenset({CONF_TARGET_TEMP, CONF_HOT_WATER_RATIO})
+_LIVE_KEYS = frozenset({
+    CONF_TARGET_TEMP,
+    CONF_HOT_WATER_RATIO,
+    CONF_MIN_TEMP,
+    CONF_MAX_TEMP,
+})
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
@@ -58,7 +69,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Handle options update.
 
-    只有可调参数（目标温度/热水比例）变化时热应用，避免拖动 number
+    只有可调参数（目标温度/热水比例/推荐窗口上下限）变化时热应用，避免拖动 number
     实体触发整条目重载（实体瞬间不可用 + 监听重建）；标题、data 等
     结构性变化（实体配置来源）仍走完整重载。
     """
