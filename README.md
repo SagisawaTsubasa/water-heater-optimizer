@@ -24,7 +24,9 @@
    Copy the `custom_components/water_heater_optimizer` folder into your Home Assistant `custom_components` directory (overwrite the old version).
 2. 从 0.3.0 升级时，删除旧目录残留的 `services.yaml`（0.4.0 已移除该文件与服务）。  
    When upgrading from 0.3.0, delete the leftover `services.yaml` in the old folder (removed in 0.4.0).
-3. 重启 Home Assistant。  
+3. 从 0.4.0 升级时，删除旧目录残留的 `web.py` 与 `static/` 子目录（0.5.0 已移除文羽面板页）。  
+   When upgrading from 0.4.0, delete the leftover `web.py` and `static/` folder in the old directory (the FumihaHub panel page was removed in 0.5.0).
+4. 重启 Home Assistant。  
    Restart Home Assistant.
 
 ---
@@ -89,6 +91,10 @@ Toggle automatic application of the recommended temperature. |
 Shower target temperature, directly adjustable with immediate effect (30~60°C, persisted in the entry, survives restarts). |
 | `number.{name}_hot_water_ratio` | Number | 热水比例，可直接修改并立即生效（0.30~0.95，写入条目配置，重启保留）。  
 Hot water ratio, directly adjustable with immediate effect (0.30~0.95, persisted in the entry, survives restarts). |
+| `number.{name}_recommended_minimum` | Number | 推荐设定温度下限，可直接修改并立即生效（30~60°C，写入条目配置，重启保留）。  
+Recommended setpoint minimum, directly adjustable with immediate effect (30~60°C, persisted in the entry, survives restarts). |
+| `number.{name}_recommended_maximum` | Number | 推荐设定温度上限，可直接修改并立即生效（30~70°C，写入条目配置，重启保留）。  
+Recommended setpoint maximum, directly adjustable with immediate effect (30~70°C, persisted in the entry, survives restarts). |
 
 ---
 
@@ -145,6 +151,14 @@ Yes. Add two optimizer instances, both pointing to the same inlet sensor but dif
 ---
 
 ## 更新日志 / Changelog
+
+### 0.5.0
+- 新增：推荐设定温度下限/上限原生化为 `number` 实体（30~60°C / 30~70°C，步进 1，BOX 输入），可在 HA 设备页直接调整，立即生效且重启保留；四个参数全部脱离文羽面板页即可调  
+  Added: the recommended setpoint minimum/maximum are now native `number` entities (30~60°C / 30~70°C, step 1, BOX input), adjustable on the HA device page with immediate effect and persisted; all four parameters are tunable without the FumihaHub panel page
+- 变更：调整下限/上限不再触发条目重载——与目标温度/热水比例同走热应用路径，推荐值按最近一次有效均值立即重算  
+  Changed: changing the window bounds no longer reloads the entry — hot-applied like target temperature/hot water ratio, with the recommendation recalculated from the latest valid average immediately
+- 移除：文羽面板页已下线（FumihaHub 壳信息页随删，参数与读数改在 HA 原生设备页查看/调整），manifest 不再依赖 `http`；升级后可删除旧目录残留的 `web.py` 与 `static/` 子目录  
+  Removed: the FumihaHub shell info page is retired (parameters and readouts live on the native HA device page); the manifest no longer depends on `http` — after upgrading you may delete the leftover `web.py` and `static/` folder
 
 ### 0.4.0
 - 重构：水温数据源改为进水温度的 **24h 移动平均**（HA 原生 `filter` 辅助实体，集成只引用不内置统计）；升级后请在条目「配置」中把平均温度传感器指向新建的 filter 实体（交付文档见仓库 `debug/` 目录）  

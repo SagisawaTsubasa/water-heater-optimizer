@@ -21,7 +21,6 @@ def _install_ha_stubs() -> None:
     ha_const = types.ModuleType("homeassistant.const")
     ha_const.STATE_UNAVAILABLE = "unavailable"
     ha_const.STATE_UNKNOWN = "unknown"
-    ha_const.EVENT_HOMEASSISTANT_STARTED = "homeassistant_started"
 
     class _Platform:
         SENSOR = "sensor"
@@ -92,47 +91,6 @@ def _install_ha_stubs() -> None:
     ha_helpers.event = ha_event
     ha_helpers.typing = ha_typing
 
-    # web.py 的 import 面（包 __init__ 会 import web）
-    aiohttp_mod = types.ModuleType("aiohttp")
-    aiohttp_web = types.ModuleType("aiohttp.web")
-
-    class _Request:
-        pass
-
-    class _Response:
-        pass
-
-    aiohttp_web.Request = _Request
-    aiohttp_web.Response = _Response
-    aiohttp_mod.web = aiohttp_web
-
-    ha_components = types.ModuleType("homeassistant.components")
-    ha_http = types.ModuleType("homeassistant.components.http")
-
-    class _HomeAssistantView:
-        url = ""
-        name = ""
-        requires_auth = True
-
-        @staticmethod
-        def json(data):
-            return data
-
-    def _require_admin(fn):
-        return fn
-
-    class _StaticPathConfig:
-        def __init__(self, *args, **kwargs):
-            pass
-
-    ha_http.HomeAssistantView = _HomeAssistantView
-    ha_http.require_admin = _require_admin
-    ha_http.StaticPathConfig = _StaticPathConfig
-    ha_components.http = ha_http
-
-    ha_loader = types.ModuleType("homeassistant.loader")
-    ha_loader.async_get_loaded_integration = lambda hass, domain: None
-
     # number.py 的 import 面（FX-UX-126 步7 参数原生化）
     ha_number = types.ModuleType("homeassistant.components.number")
 
@@ -198,14 +156,9 @@ def _install_ha_stubs() -> None:
         "homeassistant.helpers.dispatcher": ha_disp,
         "homeassistant.helpers.event": ha_event,
         "homeassistant.helpers.typing": ha_typing,
-        "aiohttp": aiohttp_mod,
-        "aiohttp.web": aiohttp_web,
-        "homeassistant.components": ha_components,
-        "homeassistant.components.http": ha_http,
         "homeassistant.components.number": ha_number,
         "homeassistant.helpers.entity": ha_entity,
         "homeassistant.helpers.entity_platform": ha_platform,
-        "homeassistant.loader": ha_loader,
     }.items():
         sys.modules[name] = mod
 
@@ -726,16 +679,11 @@ def test_apply_skips_nonfinite_current():
     asyncio.run(scenario())
 
 
-def test_setup_entry_rollback_on_web_error(monkeypatch):
+def test_setup_entry_rollback_on_forward_error():
     async def scenario():
-        # R1 P2#3：web setup 抛错后 on_unload 链回滚——hass.data 与 listener 清
+        # R1 P2#3：setup 中途抛错后 on_unload 链回滚——hass.data 与 listener 清
+        # （原注入点=0.5.0 已下线的壳信息页 setup 抛错，现改用平台转发抛错）
         import water_heater_optimizer as wha
-        from water_heater_optimizer import web as web_mod
-
-        async def _boom(hass):
-            raise RuntimeError("web boom")
-
-        monkeypatch.setattr(web_mod, "async_setup_web", _boom)
 
         on_unload = []
         entry = types.SimpleNamespace(
@@ -748,8 +696,8 @@ def test_setup_entry_rollback_on_web_error(monkeypatch):
         )
         hass = FakeHass()
 
-        async def _fail_forward(hass_, entry_, platforms):
-            raise AssertionError("web 抛错后不应到达平台转发")
+        async def _fail_forward(entry_, platforms):
+            raise RuntimeError("forward boom")
 
         hass.config_entries = types.SimpleNamespace(
             async_forward_entry_setups=_fail_forward
@@ -768,8 +716,6 @@ def test_setup_entry_rollback_on_web_error(monkeypatch):
             fn()
         assert opt._listeners == []
         assert "test_entry" not in hass.data.get("water_heater_optimizer", {})
-        # 末条 web unload 不炸（flags 未建，早退路径）
-        assert "water_heater_optimizer_web_registered" not in hass.data
 
     asyncio.run(scenario())
 
