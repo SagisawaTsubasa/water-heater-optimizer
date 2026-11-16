@@ -41,5 +41,10 @@
       "invalid_range": "Minimum temperature ({min_temp}) must be lower than maximum temperature ({max_temp}).",
       "already_configured": "This water heater is already configured"
     }
+  },
+  "exceptions": {
+    "invalid_window": {
+      "message": "Recommended setpoint minimum ({min_temp}) must stay lower than the maximum ({max_temp})."
+    }
   }
 }

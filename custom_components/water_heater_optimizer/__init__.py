@@ -58,6 +58,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
+    # R3-fix F-647：重载/启动完成后追平一次下发评估。forward 返回时各平台
+    # async_added_to_hass 已跑完（HA 2026.1.3 实证：entity_platform.py:1010
+    # → entity.py:1378），switch 的 RestoreEntity 已恢复 auto_adjust——
+    # 结构性键（如 inlet 均值源）变更重载或新均值恒定使监听器永不触发时，
+    # 在此补一次比对下发（用户实测缺口：重配均值源后 rec 46 一天半未下发）。
+    # 走 _spawn_apply 单飞、不阻塞 setup；热水器缺席等跳过路径由
+    # _apply_temperature 的 INFO 落因兜底。
+    if optimizer.auto_adjust and optimizer.recommended_temp is not None:
+        _LOGGER.info(
+            "条目就绪且自动调节开启，追平评估下发（推荐 %s°C）",
+            optimizer.recommended_temp,
+        )
+        optimizer._spawn_apply(optimizer._apply_temperature())
+
     return True
 
 

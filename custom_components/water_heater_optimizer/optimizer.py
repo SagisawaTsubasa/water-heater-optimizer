@@ -83,7 +83,14 @@ class WaterHeaterOptimizer:
             # 手工改 storage 可能绕过选择器范围 (L7)
             _LOGGER.warning("热水比例必须大于 0（当前 %s），跳过计算", ratio)
             return None
-        if min_temp > max_temp:
+        if min_temp == max_temp:
+            # R3-fix F-574：等值窗口与倒置一样不可达自写入面（表单/实体都拒
+            # 等值），只可能来自手工改 storage——行为保持不变（两侧夹到同值），
+            # 但必须落 WARNING 可审计，不再静默冻结推荐值
+            _LOGGER.warning(
+                "窗口上下限等值（min=max=%.1f），推荐值恒为该值", min_temp
+            )
+        elif min_temp > max_temp:
             _LOGGER.warning(
                 "窗口上下限倒置（min=%.1f > max=%.1f），按交换后窗口计算",
                 min_temp, max_temp,

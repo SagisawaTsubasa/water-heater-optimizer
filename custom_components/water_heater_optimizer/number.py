@@ -1,6 +1,7 @@
 """Number platform for Water Heater Optimizer."""
 
 import logging
+import math
 
 from homeassistant.components.number import NumberEntity, NumberMode
 from homeassistant.config_entries import ConfigEntry
@@ -98,9 +99,11 @@ class _OptimizerNumber(NumberEntity):
 
         仅 Min/Max 两类生效（按既有 CONFIG_KEY 判定，不新增角色属性）；
         等值也拒，与表单 invalid_range（min >= max）语义对齐；拦截时抛
-        HomeAssistantError 且不落 options。sibling 不可解析（手工改
-        storage 的坏值路径）时落 WARNING 放行——交叉约束无从判定，坏值
-        已由 calculate 的非法配置 WARNING 兜底响，非静默回落。
+        走翻译体系的 HomeAssistantError（invalid_window，R3-fix F-576）
+        且不落 options。sibling 不可解析或非有限（手工改 storage 的坏值
+        路径）时落 WARNING 放行——交叉约束无从判定，坏值已由 calculate
+        的非法配置 WARNING 兜底响，非静默回落（NaN 曾因 IEEE 比较恒
+        False 静默绕过两个 raise，R3-fix F-575 补 isfinite 检查）。
         """
         if self.CONFIG_KEY == CONF_MIN_TEMP:
             sib_key, sib_default = CONF_MAX_TEMP, DEFAULT_MAX_TEMP
@@ -121,13 +124,32 @@ class _OptimizerNumber(NumberEntity):
                 "存量 %s 值 %r 不可解析，跳过本次窗口交叉校验", sib_key, raw_sibling
             )
             return
+        if not math.isfinite(sib_val):
+            # R3-fix F-575：NaN 转换成功但 IEEE 比较（>=/<=）恒 False，
+            # 会静默绕过下方两个 raise——非有限值同样无从交叉判定，
+            # WARNING 后放行，坏值由 calculate 的 isfinite 守卫兜底响
+            _LOGGER.warning(
+                "存量 %s 值 %r 非有限数，跳过本次窗口交叉校验", sib_key, raw_sibling
+            )
+            return
+        # R3-fix F-576：文案走 HA 异常翻译（exceptions.invalid_window）——
+        # placeholders 命名为 min_temp/max_temp，min/max 两个写入方向陈述
+        # 同一不变量；:g 显示口径沿用原硬编码文案
+        placeholders = {
+            "min_temp": f"{value if self.CONFIG_KEY == CONF_MIN_TEMP else sib_val:g}",
+            "max_temp": f"{sib_val if self.CONFIG_KEY == CONF_MIN_TEMP else value:g}",
+        }
         if self.CONFIG_KEY == CONF_MIN_TEMP and value >= sib_val:
             raise HomeAssistantError(
-                f"推荐设定温度下限（{value:g}）必须低于上限（{sib_val:g}）"
+                translation_domain=DOMAIN,
+                translation_key="invalid_window",
+                translation_placeholders=placeholders,
             )
         if self.CONFIG_KEY == CONF_MAX_TEMP and value <= sib_val:
             raise HomeAssistantError(
-                f"推荐设定温度上限（{value:g}）必须高于下限（{sib_val:g}）"
+                translation_domain=DOMAIN,
+                translation_key="invalid_window",
+                translation_placeholders=placeholders,
             )
 
 

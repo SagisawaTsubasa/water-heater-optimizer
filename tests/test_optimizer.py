@@ -46,7 +46,18 @@ def _install_ha_stubs() -> None:
     ha_exc = types.ModuleType("homeassistant.exceptions")
 
     class _HomeAssistantError(Exception):
-        pass
+        # 签名对齐 HA 2026.1.3 exceptions.py:39-54（R3-fix F-576 翻译异常）
+        def __init__(
+            self,
+            *args,
+            translation_domain=None,
+            translation_key=None,
+            translation_placeholders=None,
+        ):
+            super().__init__(*args)
+            self.translation_domain = translation_domain
+            self.translation_key = translation_key
+            self.translation_placeholders = translation_placeholders
 
     ha_exc.HomeAssistantError = _HomeAssistantError
 
@@ -864,3 +875,199 @@ def test_calculate_swapped_window_logs_warning(caplog):
     with caplog.at_level("WARNING"):
         assert opt.calculate(20) == 50  # 交换后 [50,60]：44.29 → 夹到下限 50
     assert "倒置" in caplog.text
+
+
+# --- wh-dehub-126 R3-fix：F-574 等值窗口 / F-575 NaN sibling /
+# --- F-576 翻译异常 / F-577 number 接线钉 / F-647 重载·启动追平
+
+
+def test_calculate_equal_window_logs_warning(caplog):
+    # F-574：等值窗口（min==max，手工改 storage 可达）不再静默——与倒置
+    # 分支同款 WARNING，行为不变（两侧夹到同值）
+    _, opt = make_optimizer()
+    opt.config["min_temp"] = 50
+    opt.config["max_temp"] = 50
+    with caplog.at_level("WARNING"):
+        assert opt.calculate(20) == 50
+    assert "等值" in caplog.text
+
+
+def test_number_cross_constraint_nan_sibling_warns_and_allows(caplog):
+    async def scenario():
+        # F-575：sibling 为 NaN 时 IEEE 比较恒 False 曾静默绕过两个 raise——
+        # 现在落 WARNING 后放行（坏值由 calculate 的 isfinite 守卫兜底响）
+        hass, opt = make_optimizer()
+        hass.config_entries = FakeConfigEntries()
+        opt.entry.options["max_temp"] = float("nan")
+        mn = number_mod.MinTempNumber(opt, opt.entry)
+        with caplog.at_level("WARNING"):
+            await mn.async_set_native_value(60)  # 60 >= NaN 恒 False → 走放行
+        assert opt.entry.options["min_temp"] == 60
+        assert "非有限" in caplog.text
+        assert len(hass.config_entries.updates) == 1  # 放行且落盘
+
+    asyncio.run(scenario())
+
+
+def test_number_cross_constraint_raises_translated_error():
+    async def scenario():
+        # F-576：拒绝路径的 HomeAssistantError 走翻译体系（不再中文硬编码）
+        from homeassistant.exceptions import HomeAssistantError
+
+        hass, opt = make_optimizer()
+        hass.config_entries = FakeConfigEntries()
+        mn = number_mod.MinTempNumber(opt, opt.entry)
+        mx = number_mod.MaxTempNumber(opt, opt.entry)
+        with pytest.raises(HomeAssistantError) as exc_min:
+            await mn.async_set_native_value(60)
+        assert exc_min.value.translation_domain == "water_heater_optimizer"
+        assert exc_min.value.translation_key == "invalid_window"
+        assert exc_min.value.translation_placeholders == {
+            "min_temp": "60",
+            "max_temp": "50",
+        }
+        with pytest.raises(HomeAssistantError) as exc_max:
+            await mx.async_set_native_value(30)
+        assert exc_max.value.translation_key == "invalid_window"
+        # max 写入方向同一不变量：占位符仍陈述 min<max（sibling 在前）
+        assert exc_max.value.translation_placeholders == {
+            "min_temp": "40",
+            "max_temp": "30",
+        }
+
+    asyncio.run(scenario())
+
+
+def test_number_platform_setup_registers_all_entities():
+    async def scenario():
+        # F-577：接线钉——async_setup_entry 必须注册全部四类实体（此前所有
+        # 钉都直实例化，实体清单漂移不会变红）
+        hass, opt = make_optimizer()
+        _register_optimizer(hass, opt)
+        added = []
+        # AddEntitiesCallback 语义=收实体列表（async_add_entities([...]) 一次
+        # 传入整表），用 extend 展平
+        await number_mod.async_setup_entry(hass, opt.entry, added.extend)
+        assert [type(e).__name__ for e in added] == [
+            "TargetTempNumber",
+            "HotWaterRatioNumber",
+            "MinTempNumber",
+            "MaxTempNumber",
+        ]
+
+    asyncio.run(scenario())
+
+
+def _make_full_entry(data_overrides=None):
+    """带 on_unload/listener 桩的完整 entry（async_setup_entry 全路径用）。"""
+    return types.SimpleNamespace(
+        data=dict(make_optimizer_entry_data(), **(data_overrides or {})),
+        options={},
+        title="Optimizer test",
+        entry_id="test_entry",
+        async_on_unload=lambda fn: None,
+        add_update_listener=lambda fn: (lambda: None),
+    )
+
+
+async def _setup_entry_simulating_reload(hass, entry, restored_on=True):
+    """跑 async_setup_entry 全路径，forward 桩模拟平台加载时序。
+
+    时序依据（HA 2026.1.3 wheel 实证）：async_forward_entry_setups 返回前
+    各实体 async_added_to_hass 已跑完（entity_platform.py:1010 →
+    entity.py:1378），switch 的 RestoreEntity 在其中把 auto_adjust 恢复
+    到 optimizer——桩在该点写入 restored_on 复刻真机顺序。
+    """
+    import water_heater_optimizer as wha
+
+    async def _forward(entry_, platforms):
+        hass.data["water_heater_optimizer"][entry_.entry_id].auto_adjust = (
+            restored_on
+        )
+
+    hass.config_entries = types.SimpleNamespace(async_forward_entry_setups=_forward)
+    return await wha.async_setup_entry(hass, entry)
+
+
+def test_setup_entry_catches_up_after_structural_reload():
+    async def scenario():
+        # F-647 场景钉（用户 2026-11-16 实测形态）：结构性键（inlet 均值源）
+        # 变更 → 条目重载 → rec=46（avg22+target39+ratio0.7，窗口[40,48]）
+        # 但新均值恒定使监听器永不触发 → setup 完成后必须追平一次下发
+        heater = FakeState(
+            "heat_pump", {"temperature": 50, "min_temp": 35, "max_temp": 75}
+        )
+        entry = _make_full_entry({
+            "inlet_temp_sensor": "sensor.avg_new",
+            "target_temp": 39,
+            "min_temp": 40,
+            "max_temp": 48,
+        })
+        hass = FakeHass(states={
+            "sensor.avg_new": FakeState("22"),
+            "water_heater.test": heater,
+        })
+        assert await _setup_entry_simulating_reload(hass, entry) is True
+        opt = hass.data["water_heater_optimizer"]["test_entry"]
+        assert opt.recommended_temp == 46  # 22+(39-22)/0.7=46.29 → 46
+        await drain(hass)
+        assert len(hass.services.calls) == 1  # 设备 50 ≠ rec 46 → 追平下发
+        assert hass.services.calls[0][2] == {
+            "entity_id": "water_heater.test",
+            "temperature": 46,
+        }
+
+    asyncio.run(scenario())
+
+
+def test_setup_entry_catchup_no_send_when_same_setting():
+    async def scenario():
+        # F-647 判别钉②：rec == 设备设定 → 不下发不误报
+        heater = FakeState(
+            "heat_pump", {"temperature": 44, "min_temp": 35, "max_temp": 75}
+        )
+        hass = FakeHass(states={
+            "sensor.avg_inlet": FakeState("20"),
+            "water_heater.test": heater,
+        })
+        assert await _setup_entry_simulating_reload(hass, _make_full_entry()) is True
+        await drain(hass)
+        assert hass.services.calls == []
+
+    asyncio.run(scenario())
+
+
+def test_setup_entry_catchup_skips_when_heater_missing(caplog):
+    async def scenario():
+        # F-647 判别钉③：设备缺席 → INFO 跳过，不炸 setup
+        hass = FakeHass(states={"sensor.avg_inlet": FakeState("20")})
+        with caplog.at_level("INFO"):
+            assert await _setup_entry_simulating_reload(
+                hass, _make_full_entry()
+            ) is True
+            # 追平任务 setup 返回后才执行（async_create_task），drain 须留在
+            # 捕获窗口内，否则跳过 INFO 落在 at_level 块外不被捕获
+            await drain(hass)
+        assert hass.services.calls == []
+        assert "状态缺席" in caplog.text
+
+    asyncio.run(scenario())
+
+
+def test_setup_entry_no_catchup_when_switch_restored_off():
+    async def scenario():
+        # F-647 判别钉④：总闸恢复为 off → 无追平（guard 只认 on）
+        heater = FakeState(
+            "heat_pump", {"temperature": 42, "min_temp": 35, "max_temp": 75}
+        )
+        hass = FakeHass(states={
+            "sensor.avg_inlet": FakeState("20"),
+            "water_heater.test": heater,
+        })
+        assert await _setup_entry_simulating_reload(
+            hass, _make_full_entry(), restored_on=False
+        ) is True
+        await drain(hass)
+        assert hass.services.calls == []
+
+    asyncio.run(scenario())
