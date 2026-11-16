@@ -152,6 +152,12 @@ Yes. Add two optimizer instances, both pointing to the same inlet sensor but dif
 
 ## 更新日志 / Changelog
 
+### 0.5.1
+- 修复：条目重载或 HA 重启完成后，自动调节已开启且推荐值就绪时追加一次比对下发——此前结构性配置变更（如更换均值源）重载后只重算不下发，新均值恒定时监听器也不再触发，推荐值可能长期不落地（实测案例：重配均值源后推荐 46°C 一天半未下发，设备停在 50°C，手动对齐才一致）  
+  Fixed: after an entry reload or HA restart completes, one compare-then-apply pass now runs when auto-adjust is on and a recommendation is ready — previously a structural re-configuration (e.g. switching the average source) only recalculated without sending, and a constant new average never triggered the listener, leaving the recommendation unapplied (real-world case: the recommended 46°C was never sent for a day and a half while the device stayed at 50°C)
+- 改进：推荐窗口下限/上限写入的拒绝报错改走 HA 异常翻译体系（非中文界面不再看到中文报错文案）；手工改存储造成 min==max 等值窗口或 NaN 等非有限窗口值时补 WARNING 日志，不再静默  
+  Improved: the rejection error when writing the window bounds now uses HA's exception translation (non-Chinese UIs no longer see Chinese error text); an equal-value window (min==max) or a non-finite window value from hand-edited storage now logs a WARNING instead of staying silent
+
 ### 0.5.0
 - 新增：推荐设定温度下限/上限原生化为 `number` 实体（30~60°C / 30~70°C，步进 1，BOX 输入），可在 HA 设备页直接调整，立即生效且重启保留；四个参数全部脱离文羽面板页即可调  
   Added: the recommended setpoint minimum/maximum are now native `number` entities (30~60°C / 30~70°C, step 1, BOX input), adjustable on the HA device page with immediate effect and persisted; all four parameters are tunable without the FumihaHub panel page
