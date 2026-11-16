@@ -58,19 +58,36 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    # R3-fix F-647：重载/启动完成后追平一次下发评估。forward 返回时各平台
-    # async_added_to_hass 已跑完（HA 2026.1.3 实证：entity_platform.py:1010
-    # → entity.py:1378），switch 的 RestoreEntity 已恢复 auto_adjust——
+    # R3-fix F-647：重载/启动完成后追平一次下发评估。时序前提=forward 返回
+    # 时各实体 async_added_to_hass 已跑完（switch RestoreEntity 已恢复
+    # auto_adjust），外层证据链（HA 2026.1.3 wheel 实证，部署版本）：
+    #   ① forward → 各平台 _async_setup_platform（entity_platform.py:428）；
+    #   ② setup awaitable 完成后 "Block till all entities are done"：
+    #     while self._tasks: …await asyncio.gather(*pending)（:460-467）；
+    #   ③ setup 期间 async_add_entities 经 _async_schedule_add_entities
+    #     [_for_entry]（:548/:568）排入 self._tasks（_setup_complete 未置位
+    #     :564/:594）；
+    #   ④ 任务体 await add_to_platform_finish（:1010）→ await
+    #     async_added_to_hass（entity.py:1378）。
+    # hacs.json 下限 2024.11 的老版本行为未证——不为它加代码面兼容分支
+    # （部署实例 2026.1.3 已实证）。
     # 结构性键（如 inlet 均值源）变更重载或新均值恒定使监听器永不触发时，
     # 在此补一次比对下发（用户实测缺口：重配均值源后 rec 46 一天半未下发）。
     # 走 _spawn_apply 单飞、不阻塞 setup；热水器缺席等跳过路径由
-    # _apply_temperature 的 INFO 落因兜底。
+    # _apply_temperature 的 INFO 落因兜底；guard 不成立落 debug——
+    # 总闸 on 却见 auto_adjust=False 即时序未成立信号，部署后可区分三种落因。
     if optimizer.auto_adjust and optimizer.recommended_temp is not None:
         _LOGGER.info(
             "条目就绪且自动调节开启，追平评估下发（推荐 %s°C）",
             optimizer.recommended_temp,
         )
         optimizer._spawn_apply(optimizer._apply_temperature())
+    else:
+        _LOGGER.debug(
+            "追平跳过：auto_adjust=%s recommended=%s",
+            optimizer.auto_adjust,
+            optimizer.recommended_temp,
+        )
 
     return True
 

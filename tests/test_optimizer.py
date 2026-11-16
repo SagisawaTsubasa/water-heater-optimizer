@@ -909,6 +909,24 @@ def test_number_cross_constraint_nan_sibling_warns_and_allows(caplog):
     asyncio.run(scenario())
 
 
+def test_number_set_native_value_nan_warns_and_skips(caplog):
+    async def scenario():
+        # R4-fix P3#3：写入值 NaN 曾在 round()（无 ndigits）抛裸 ValueError
+        # （HA 服务 schema vol.Coerce(float) 放行、基类范围比较恒 False 不拦）
+        # ——现在 WARNING 后跳过：值未变、未持久化
+        hass, opt = make_optimizer()
+        hass.config_entries = FakeConfigEntries()
+        mn = number_mod.MinTempNumber(opt, opt.entry)
+        with caplog.at_level("WARNING"):
+            await mn.async_set_native_value(float("nan"))
+        assert opt.entry.options == {}  # 未落 options
+        assert len(hass.config_entries.updates) == 0  # 未走 set_live_config
+        assert mn.native_value == 40  # config 原值未变
+        assert "非有限" in caplog.text
+
+    asyncio.run(scenario())
+
+
 def test_number_cross_constraint_raises_translated_error():
     async def scenario():
         # F-576：拒绝路径的 HomeAssistantError 走翻译体系（不再中文硬编码）
@@ -1054,9 +1072,12 @@ def test_setup_entry_catchup_skips_when_heater_missing(caplog):
     asyncio.run(scenario())
 
 
-def test_setup_entry_no_catchup_when_switch_restored_off():
+def test_setup_entry_no_catchup_when_switch_restored_off(caplog):
     async def scenario():
-        # F-647 判别钉④：总闸恢复为 off → 无追平（guard 只认 on）
+        # F-647 判别钉④：总闸恢复为 off → 无追平（guard 只认 on）。
+        # R4-fix P3#2：断言「追平评估」INFO 不出现——钉住 __init__ 的
+        # auto_adjust 守卫本身（删守卫时 _apply_temperature 内部复检的
+        # 「自动调节已关」INFO 兜底仍使 calls==[]，本断言使该 mutation 必红）
         heater = FakeState(
             "heat_pump", {"temperature": 42, "min_temp": 35, "max_temp": 75}
         )
@@ -1064,10 +1085,12 @@ def test_setup_entry_no_catchup_when_switch_restored_off():
             "sensor.avg_inlet": FakeState("20"),
             "water_heater.test": heater,
         })
-        assert await _setup_entry_simulating_reload(
-            hass, _make_full_entry(), restored_on=False
-        ) is True
-        await drain(hass)
+        with caplog.at_level("INFO"):
+            assert await _setup_entry_simulating_reload(
+                hass, _make_full_entry(), restored_on=False
+            ) is True
+            await drain(hass)
         assert hass.services.calls == []
+        assert "追平评估" not in caplog.text
 
     asyncio.run(scenario())

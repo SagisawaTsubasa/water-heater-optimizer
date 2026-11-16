@@ -84,9 +84,19 @@ class _OptimizerNumber(NumberEntity):
 
     async def async_set_native_value(self, value: float) -> None:
         """Snap to step, clamp to range, then persist via the optimizer."""
+        value = float(value)
+        if not math.isfinite(value):
+            # R4-fix P3#3：写入值 NaN 曾在下方 round()（无 ndigits）抛裸
+            # ValueError——HA 服务 schema vol.Coerce(float) 放行 NaN、基类
+            # 范围比较（</>）对 NaN 恒 False 不拦。按 F-575 同款 WARNING
+            # 放行形态跳过本次写入（不落 options，不加新翻译键）
+            _LOGGER.warning(
+                "%s 写入值 %r 非有限数，跳过本次写入", self.CONFIG_KEY, value
+            )
+            return
         step = self.native_step or 1.0
         lo = self.native_min_value
-        snapped = lo + round((float(value) - lo) / step) * step
+        snapped = lo + round((value - lo) / step) * step
         snapped = min(max(snapped, lo), self.native_max_value)
         self._validate_window(snapped)
         self._optimizer.set_live_config(self.CONFIG_KEY, round(snapped, 2))
